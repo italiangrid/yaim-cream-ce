@@ -1,0 +1,431 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004. 
+# See http://www.eu-egee.org/partners/ for details on the copyright 
+# holders.  
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+#
+#    http://www.apache.org/licenses/LICENSE-2.0 
+#
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS 
+# OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_blah
+#
+# DESCRIPTION : This function configures blah in a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# NOTES :       * creates /opt/glite/etc/blah.config
+#               * creates /opt/glite/etc/glite-ce-cream/blah.sh
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#                 
+##############################################################################
+
+function config_cream_blah_check () {
+  requires $1 CE_BATCH_SYS BATCH_BIN_DIR BLAH_CHILD_POLL_TIMEOUT \
+       BLPARSER_WITH_UPDATER_NOTIFIER BLAHPD_LOCATION BLAHPD_CONFIG_LOCATION
+  ret_cod1=$? 
+
+  BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+
+  if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = false ]; then
+    requires $1 BLPARSER_HOST BLP_PORT
+    ret_cod2=$? 
+
+    if [ "$BATCH_SYS" == "slurm" ]; then
+       yaimlog ERROR "SLURM not supported by the old blparser!"
+       ret_cod2=1 
+    fi
+  else # New blparser
+    requires $1 BUPDATER_LOOP_INTERVAL
+    ret_cod2=$?
+    if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ]; then 
+      requires $1 BATCH_LOG_DIR #BATCH_LOG_DIR is required with the new blparser for torque/pbs
+      ret_cod3=$?
+    fi
+  fi
+
+  if [ "x$BATCH_SYS" == "xlsf" ]; then
+    requires $1 BATCH_CONF_DIR LSFPROFILE_DIR
+    ret_cod4=$?
+  fi
+
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ] || [ ! $ret_cod3 == 0 ] || [ ! $ret_cod4 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+}
+
+function config_cream_blah_setenv () {
+  yaimgridenv_set BLAHPD_LOCATION ${BLAHPD_LOCATION}
+  yaimgridenv_set BLAHPD_CONFIG_LOCATION ${BLAHPD_CONFIG_LOCATION}
+}
+
+function config_cream_blah() {
+
+  GLITE_CREAM_LOCATION_ETC=/etc
+  GLITE_CREAM_LOCATION_LOG=/var/log/cream
+  GLITE_CREAM_LOCATION_LIBEXEC=/usr/libexec
+  GLITE_CREAM_LOCATION_VAR=/var
+
+  FUNCTION=config_cream_blah
+
+# To be removed as soon as this stuff is done by the rpm BEGIN
+mkdir -p /var/log/cream/accounting
+chown root.tomcat /var/log/cream/accounting
+chmod 0730 /var/log/cream/accounting
+
+mkdir -p /var/blah
+chown tomcat.tomcat /var/blah
+chmod 771 /var/blah
+# To be remove END
+
+
+  BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+  if [ $BATCH_SYS != pbs ] && [ $BATCH_SYS != torque ] && [ $BATCH_SYS != lsf ] && [ $BATCH_SYS != slurm ]; then 
+    yaimlog INFO "BATCH SYSTEM = $BATCH_SYS. Does not execute config_cream_blah!"
+    return 0
+  fi
+  # backup old file
+  SCRIPT=${GLITE_CREAM_LOCATION_ETC}/blah.config
+  if [ -f $SCRIPT ]; then
+    cp $SCRIPT $SCRIPT.old
+  fi 
+
+
+  if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ]; then
+    blah_lrms=pbs
+    blah_accounting_log=${GLITE_CREAM_LOCATION_LOG}/accounting/blahp.log
+    blah_bin=${BATCH_BIN_DIR}
+    blah_conf=
+    blah_spool=${BATCH_LOG_DIR}
+    blah_nochecksubmission=yes
+    blah_nologaccess=
+    blah_fallback=no
+    blah_blp=yes
+    if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = false ]; then
+      blah_blp_server=$BLPARSER_HOST
+      blah_blp_port=$BLP_PORT
+    fi
+    blah_blp_num=
+    blah_blp_server1=
+    blah_blp_server2=
+    blah_blp_port1=
+    blah_blp_port2=
+    row_to_add=""
+
+    # New parser
+    bupdater_bin_path=${GLITE_CREAM_LOCATION_LIBEXEC}/BUpdaterPBS
+
+  elif [ $BATCH_SYS = lsf ]; then
+    blah_lrms=lsf
+    blah_accounting_log=${GLITE_CREAM_LOCATION_LOG}/accounting/blahp.log
+    blah_bin=${BATCH_BIN_DIR}
+    blah_conf=${BATCH_CONF_DIR}
+    blah_spool=
+    blah_nochecksubmission=yes
+    blah_nologaccess=
+    blah_fallback=no
+    blah_blp=yes
+    if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = false ]; then
+      blah_blp_server=$BLPARSER_HOST
+      blah_blp_port=$BLP_PORT
+    fi
+    blah_blp_num=
+    blah_blp_server1=
+    blah_blp_server2=
+    blah_blp_port1=
+    blah_blp_port2=
+    row_to_add=". ${LSFPROFILE_DIR}/profile.lsf"
+    # New parser
+    bupdater_bin_path=${GLITE_CREAM_LOCATION_LIBEXEC}/BUpdaterLSF
+
+  elif [ $BATCH_SYS = slurm ]; then
+    blah_lrms=slurm
+    blah_accounting_log=${GLITE_CREAM_LOCATION_LOG}/accounting/blahp.log
+    blah_bin=${BATCH_BIN_DIR}
+    blah_conf=${BATCH_CONF_DIR}
+    blah_spool=
+    blah_nochecksubmission=yes
+    blah_nologaccess=
+    blah_fallback=no
+    blah_blp=yes
+    if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = false ]; then
+      blah_blp_server=$BLPARSER_HOST
+      blah_blp_port=$BLP_PORT
+    fi
+    blah_blp_num=
+    blah_blp_server1=
+    blah_blp_server2=
+    blah_blp_port1=
+    blah_blp_port2=
+    row_to_add=""
+
+    # New parser
+    bupdater_bin_path=${GLITE_CREAM_LOCATION_LIBEXEC}/BUpdaterSLURM
+
+  fi
+
+
+  #----------------------------------------------------------
+  # ${GLITE_CREAM_LOCATION_ETC}/blah.config - BEGIN
+  #----------------------------------------------------------
+  cat << EOF > $SCRIPT 
+# WARNING: THIS FILE IS WRITTEN BY yaim! (function $FUNCTION)
+#
+
+# Supported batch systems
+supported_lrms=$blah_lrms
+
+blah_child_poll_timeout=$BLAH_CHILD_POLL_TIMEOUT 
+
+alldone_interval=86400
+
+${row_to_add}
+
+# Needed to implement the short term solution for proxy renewal (savannah task #8176) 
+blah_disable_wn_proxy_renewal=yes 
+
+# working on glexec -> sudo support 
+blah_disable_proxy_user_copy=yes
+blah_id_mapping_command_sudo="/usr/bin/sudo -H"
+blah_set_default_workdir_to_home=yes
+
+# DGAS logfile 
+BLAHPD_ACCOUNTING_INFO_LOG=$blah_accounting_log
+
+# Path where ${blah_lrms} executables are located 
+${blah_lrms}_binpath=$blah_bin
+
+# Path where the ${blah_lrms} conf file is located
+${blah_lrms}_confpath=$blah_conf
+
+# Path where the ${blah_lrms} logs are located (for pbs \$pbs_spoolpath/server_logs)
+${blah_lrms}_spoolpath=$blah_spool
+
+# If it is set to yes blah does not check the jobid in the logfiles
+${blah_lrms}_nochecksubmission=$blah_nochecksubmission
+
+# If it is set to yes blah does NOT use log files to get job status, 
+# but uses only standard LRMS query
+${blah_lrms}_nologaccess=$blah_nologaccess
+
+# If it is set to no blah scripts for ${blah_lrms} will not try to read 
+# locally from the logs if BLParser is not present
+${blah_lrms}_fallback=$blah_fallback
+
+# Set to yes to use Blah Log Parser for ${blah_lrms}
+${blah_lrms}_BLParser=$blah_blp
+EOF
+
+if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = false ]; then
+
+  cat << EOF >> $SCRIPT
+# Host where Blah Log Parser for ${blah_lrms} is running
+${blah_lrms}_BLPserver=$blah_blp_server
+
+# Port where Blah Log Parser for ${blah_lrms} is running
+${blah_lrms}_BLPport=$blah_blp_port
+
+# Number of Blah Log Parser to try for ${blah_lrms}
+# (if it is null ${blah_lrms}_BLPserver and ${blah_lrms}_BLPport are used)
+${blah_lrms}_num_BLParser=$blah_blp_num
+
+${blah_lrms}_BLPserver1=$blah_blp_server1
+${blah_lrms}_BLPport1=$blah_blp_port1
+
+${blah_lrms}_BLPserver2=$blah_blp_server2
+${blah_lrms}_BLPport2=$blah_blp_port2
+EOF
+
+fi
+
+if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ]; then
+  if [ $PBS_MULTIPLE_STAGING_DIRECTIVE = yes ]; then
+
+    cat << EOF >> $SCRIPT
+
+#Variable used to configure the staging option for PBS
+blah_torque_multiple_staging_directive_bug=yes
+
+EOF
+
+  else
+    cat << EOF >> $SCRIPT
+
+#Variable used to configure the staging option for PBS
+blah_torque_multiple_staging_directive_bug=no
+
+EOF
+  fi
+fi
+
+#####################
+# NEW PARSER - begin
+#####################
+
+  if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = true ]; then
+
+
+    cat << EOF >> $SCRIPT
+# New parser section
+job_registry=${GLITE_CREAM_LOCATION_VAR}/blah/user_blah_job_registry.bjr
+#
+async_notification_port=56554
+bupdater_loop_interval=${BUPDATER_LOOP_INTERVAL}
+#
+# about 2 months of purge interval.
+purge_interval=2500000
+                                                                                                                                         
+#Updater location
+bupdater_path=${bupdater_bin_path}
+                                                                                                                                         
+#Notifier location
+bnotifier_path=${GLITE_CREAM_LOCATION_LIBEXEC}/BNotifier
+                                                                                                                                         
+#Updater pid file
+bupdater_pidfile=${GLITE_CREAM_LOCATION_VAR}/blah/blah_bupdater.pid
+                                                                                                                                         
+#Notifier pid file
+bnotifier_pidfile=${GLITE_CREAM_LOCATION_VAR}/blah/blah_bnotifier.pid
+ 
+#Updater debug level
+bupdater_debug_level=2
+                                                                                                                                         
+#Updater debug log file
+bupdater_debug_logfile=${GLITE_CREAM_LOCATION_LOG}/glite-ce-bupdater.log
+                                                                                                                                         
+#Notifier debug level
+bnotifier_debug_level=2
+                                                                                                                                         
+#Notifier debug log file
+bnotifier_debug_logfile=${GLITE_CREAM_LOCATION_LOG}/glite-ce-bnotifier.log
+#
+blah_children_restart_interval=0
+
+#Enable sharing of job registry cache via mmap
+job_registry_use_mmap=yes
+
+#Enable check of execution of bupdater and bnotifier
+blah_check_children_interval=30
+
+EOF
+
+    if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ]; then
+    cat << EOF >> $SCRIPT
+
+tracejob_logs_to_read=2
+
+EOF
+
+    elif [ $BATCH_SYS = lsf ]; then
+     cat << EOF >> $SCRIPT
+#
+#use the long format for bjobs command (-l instead of -w) (yes|no) (default=yes)
+bupdater_bjobs_long_format=yes
+#
+#use bhist to calculate suspended jobs timestamp
+bupdater_use_bhist_for_susp=yes
+
+bhist_logs_to_read=10
+bhist_finalstate_interval=120
+
+EOF
+    fi
+
+  fi
+
+#####################
+# NEW PARSER - end
+#####################
+
+  #----------------------------------------------------------
+  # ${GLITE_CREAM_LOCATION_ETC}/blah.config - END
+  #----------------------------------------------------------
+
+  #----------------------------------------------------------
+  # /etc/logrotate.d/blahp-logrotate - BEGIN
+  #----------------------------------------------------------
+  SCRIPT=/etc/logrotate.d/blahp-logrotate
+  cat << EOF > $SCRIPT
+${GLITE_CREAM_LOCATION_LOG}/accounting/blahp.log {
+        copytruncate
+        rotate 365
+        size = 10M
+        missingok
+        nomail
+}
+EOF
+  #----------------------------------------------------------
+  # /etc/logrotate.d/blahp-logrotate - END
+  #----------------------------------------------------------
+
+#####################
+# NEW PARSER - begin
+#####################
+
+if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = true ]; then
+
+  #----------------------------------------------------------
+  # /etc/logrotate.d/bupdater-logrotate - BEGIN
+  #----------------------------------------------------------
+  SCRIPT=/etc/logrotate.d/bupdater-logrotate
+    cat << EOF > $SCRIPT
+${GLITE_CREAM_LOCATION_LOG}/glite-ce-bupdater.log {
+        copytruncate
+        rotate 50
+        size = 10M
+        missingok
+        nomail
+}
+EOF
+
+  #----------------------------------------------------------
+  # /etc/logrotate.d/bupdater-logrotate - END
+  #----------------------------------------------------------
+
+  #----------------------------------------------------------
+  # /etc/logrotate.d/bnotifier-logrotate - BEGIN
+  #----------------------------------------------------------
+  SCRIPT=/etc/logrotate.d/bnotifier-logrotate
+    cat << EOF > $SCRIPT
+${GLITE_CREAM_LOCATION_LOG}/glite-ce-bnotifier.log  
+ {
+        copytruncate
+        rotate 50
+        size = 10M
+        missingok
+        nomail
+}
+EOF
+                                                                                                                                        
+                                                                                                                                        
+  #----------------------------------------------------------
+  # /etc/logrotate.d/bnotifier-logrotate - END
+  #----------------------------------------------------------
+
+fi
+
+#####################
+# NEW PARSER - end
+#####################
+
+  # Set hourly cron for logrotate
+  if [[ ! -f /etc/cron.hourly/logrotate ]]; then
+    mv -f `find /etc -name logrotate` /etc/cron.hourly/
+  fi
+
+  return 0
+
+}

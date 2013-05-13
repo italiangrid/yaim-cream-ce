@@ -1,0 +1,204 @@
+#!/bin/bash
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_db
+#
+# DESCRIPTION : This function configures cream CE databases: 
+#                creamdb and delegationdb.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_db_check () {
+
+  requires $1 MYSQL_PASSWORD CREAM_DB_USER ACCESS_BY_DOMAIN MY_DOMAIN CREAM_SANDBOX_PATH \
+              CREAM_DB_HOST CREAM_DB_PASSWORD RESET_CREAM_DB_GRANTS CREAM_DB_NAME DELEGATION_DB_NAME CREAM_DB_MINPRIV_USER CREAM_DB_MINPRIV_PASSWORD
+}
+
+function config_cream_db_setenv () {
+  yaimlog DEBUG "No enviroment variables to set."
+}
+
+function config_cream_db () {
+
+  GLITE_CREAM_LOCATION_ETC=/etc
+
+  HOSTNAME=`hostname -f`
+
+  if [ "x${CREAM_DB_HOST}" = "x${HOSTNAME}" -o "x${CREAM_DB_HOST}" = "xlocalhost" ]; then
+    chmod og+rx /var/lib/mysql/ 
+    chown mysql:mysql /var/run/mysqld/
+
+    /sbin/chkconfig mysqld on
+    ps ax | grep -v grep |grep mysqld_safe > /dev/null 2>&1
+    if [ ! $? = 0 ] ; then
+      /etc/init.d/mysqld start
+      sleep 1
+    fi 
+
+    ls /tmp/mysql.sock > /dev/null 2>&1
+    if [ ! $? = 0 ]; then
+      ln -s /var/lib/mysql/mysql.sock /tmp/mysql.sock
+    fi
+
+    # set mysql password
+    set_mysql_passwd || return 1 # the function uses $MYSQL_PASSWORD
+
+    # configure the mysql conf file
+    configure_mysql 
+  fi
+
+
+  yaimlog DEBUG "Sourcing /etc/glite-ce-cream/service.properties where the needed creamdb and delegationdb versions are specified"
+  . /etc/glite-ce-cream/service.properties
+
+  if [ x = x${creamdb_version} ]; then
+    yaimlog ERROR "creamdbDatabaseVersion not found !"
+    return 1
+  fi
+
+  if [ x = x${delegationdb_version} ]; then
+    yaimlog ERROR "delegationdbDatabaseVersion not found !"
+    return 1
+  fi
+
+  yaimlog DEBUG "Grants on CreamDB ..."
+
+  if [ ${RESET_CREAM_DB_GRANTS} = "yes" ]; then
+    revoke_all_privileges ${CREAM_DB_NAME}
+  fi
+  grant_privileges ${CREAM_DB_NAME} ${CREAM_DB_USER} ${CREAM_DB_PASSWORD}
+
+
+
+  # Create creamdb_min_access.conf file 
+  CREAMDB_CONF_TEMPLATE=${GLITE_CREAM_LOCATION_ETC}/glite-ce-dbtool/creamdb_min_access.conf.template  CREAMDB_CONF=${GLITE_CREAM_LOCATION_ETC}/glite-ce-dbtool/creamdb_min_access.conf
+
+  cat ${CREAMDB_CONF_TEMPLATE} | sed \
+    -e "s/localhost/${CREAM_DB_HOST}/" \
+    -e "s/creamdb/${CREAM_DB_NAME}/" \
+    -e "s/SetThisToAUser/${CREAM_DB_MINPRIV_USER}/" \
+    -e "s/SetThisToAPassword/${CREAM_DB_MINPRIV_PASSWORD}/" \
+  > ${CREAMDB_CONF}
+
+  yaimlog DEBUG "Grants on DelegationDB ..."
+
+  if [ ${RESET_CREAM_DB_GRANTS} = "yes" ]; then
+    revoke_all_privileges ${DELEGATION_DB_NAME}
+  fi
+  grant_privileges ${DELEGATION_DB_NAME} ${CREAM_DB_USER} ${CREAM_DB_PASSWORD}
+
+  yaimlog DEBUG "Create or update database CreamDB, if needed ..."
+
+  # Use custom db name in sql script
+  cat  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_creamdb_mysql.sql | sed \
+     -e "s/creamdb/${CREAM_DB_NAME}/" \
+  > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_creamdb_mysql.tmp.sql
+
+  sh /usr/bin/createAndPopulateDB.sh ${CREAM_DB_USER} ${CREAM_DB_PASSWORD} ${CREAM_DB_NAME} ${creamdb_version} 'N' "${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_creamdb_mysql.tmp.sql" ${CREAM_DB_HOST} ${CREAM_SANDBOX_PATH}
+   if [ ! $? = 0 ] ; then
+       yaimlog ERROR "Creation of CreamDB failed"
+       return 1 
+  fi
+
+  #fix bug https://savannah.cern.ch/bugs/index.php?97441
+  mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -D ${CREAM_DB_NAME} -e "ALTER TABLE db_info MODIFY creationTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;"
+  yaimlog INFO "${CREAM_DB_NAME}.db_info table updated."
+
+  rm ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_creamdb_mysql.tmp.sql
+
+
+  yaimlog DEBUG "Create or update DelegationDB, if needed ..."
+  # Use custom db name in sql script
+  cat  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_delegationcreamdb.sql | sed \
+     -e "s/delegationcreamdb/${DELEGATION_DB_NAME}/" \
+  > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_delegationcreamdb.tmp.sql
+
+  sh /usr/bin/createAndPopulateDB.sh ${CREAM_DB_USER} ${CREAM_DB_PASSWORD} ${DELEGATION_DB_NAME} ${delegationdb_version} 'N' "${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_delegationcreamdb.tmp.sql" ${CREAM_DB_HOST}
+
+   if [ ! $? = 0 ] ; then
+       yaimlog ERROR "Creation of DelegationDB failed"
+       return 1 
+  fi
+
+  rm ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/populate_delegationcreamdb.tmp.sql
+
+
+  # Grants for minimal DB access (required by info providers)
+
+  HOSTNAME=`hostname -f`
+  mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT SELECT (submissionEnabled,startUpTime) on ${CREAM_DB_NAME}.db_info to ${CREAM_DB_MINPRIV_USER}@localhost IDENTIFIED BY '${CREAM_DB_MINPRIV_PASSWORD}' WITH GRANT OPTION;"
+  mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT SELECT (submissionEnabled,startUpTime) on ${CREAM_DB_NAME}.db_info to ${CREAM_DB_MINPRIV_USER}@'$HOSTNAME' IDENTIFIED BY '${CREAM_DB_MINPRIV_PASSWORD}' WITH GRANT OPTION;"
+
+
+
+  return 0
+}
+
+
+# The following function configure the /etc/my.cnf file
+# In particular it sets  max_connections=450 (unless already defined 
+# with a greater value)
+
+function configure_mysql () {
+
+  mysql_conf_script="/etc/my.cnf"
+  max_connection_num=`grep -Eo '^\s*max_connections\s*=\s*[0-9]+' ${mysql_conf_script} | grep -Eo '[0-9]+'`
+  if [ "x" == "x${max_connection_num}" ]; then     #max_connection_num not configured
+    input_file=${mysql_conf_script}
+    output_file=/tmp/my.cnf.out
+    exec < ${input_file}
+    while read line
+      do
+        if [ "$line" = "[mysqld]" ]; then
+           yaimlog DEBUG "[mysqld] section found in ${mysql_conf_script}"
+          cat << EOF  >> ${output_file}
+[mysqld]
+max_connections=450
+EOF
+      else
+         yaimlog DEBUG "[mysqld] section not found in ${mysql_conf_script} Added"
+        cat << EOF  >> ${output_file}
+$line
+EOF
+      fi
+    done
+ 
+    grep "\[mysqld\]" ${output_file} > /dev/null 2>&1
+ 
+    if [ ! $? = 0 ]; then
+      cat << EOF  >> ${output_file}
+[mysqld]
+max_connections=450
+EOF
+    fi
+
+    mv ${output_file} ${input_file}                                 
+    yaimlog DEBUG "max_connections was not set in /etc/my.cnf Now set to 450"
+  else if [ "$max_connection_num" -lt "450" ]; then  #max_connection_num configured
+    sed -i 's/max_connections=.*/max_connections=450/' ${mysql_conf_script}
+  fi
+  fi
+ return 0    
+}
+

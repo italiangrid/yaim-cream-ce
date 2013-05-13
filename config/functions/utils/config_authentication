@@ -1,0 +1,31 @@
+
+function config_authentication  () {
+
+CONF_FILE=$1
+CONF_FILE_TMP="/tmp/authentication_conf.tmp"
+
+yaimlog DEBUG "Configuring ${CONF_FILE} for USE_ARGUS ${USE_ARGUS}"
+
+if [ "x${USE_ARGUS}" == "xyes" ]; then
+  grep "<argus-pep"   ${CONF_FILE} > /dev/null 2>&1
+  if [ ! $? = 0 ]; then
+    config_authz "argus" ${CONF_FILE}
+    config_argus ${CONF_FILE}
+  else
+    config_argus ${CONF_FILE}
+  fi
+
+else
+  grep "</authzchain>"  ${CONF_FILE} > /dev/null 2>&1
+  if [ ! $? = 0 ]; then
+    config_authz "authz" ${CONF_FILE}
+  fi
+  cat ${CONF_FILE} | sed \
+    -e "s|/opt/glite/etc/lcas/ban_users.db|${GLITE_CREAM_LOCATION_ETC}/lcas/ban_users.db|" \
+    > ${CONF_FILE_TMP}
+    mv ${CONF_FILE_TMP} ${CONF_FILE}
+fi
+
+}
+
+

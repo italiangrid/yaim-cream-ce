@@ -1,0 +1,260 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_glexec
+#
+# DESCRIPTION : This function configures glexec on a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# NOTES :       * creates /etc/ld.so.conf.d/glite.conf
+#               * creates /etc/ld.so.conf.d/globus.conf
+#               * creates GLEXEC_CREAM_LCMAPS_CONFIG=${GLEXEC_CREAM_LCMAPS_DIR:-${INSTALL_ROOT}/glite/etc/lcmaps}/lcmaps-glexec.db
+#               * creates GLEXEC_CREAM_LCAS_CONFIG=${GLEXEC_CREAM_LCAS_DIR:-${INSTALL_ROOT}/glite/etc/lcas}/lcas-glexec.db
+#               * creates ${GLITE_CREAM_LOCATION_ETC}/glexec.conf
+#               * creates /etc/logrotate.d/glexec
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_glexec_check () {
+
+  requires $1 CE_BATCH_SYS GROUPMAPFILE GRIDMAPFILE GRIDMAPDIR \
+           GLEXEC_CREAM_LCASLCMAPS_LOG GLEXEC_CREAM_LOG_DESTINATION \
+           GLEXEC_GROUP TOMCAT_USER
+    ret_cod1=$?
+    if [ "x${GLEXEC_CREAM_LOG_DESTINATION}" == "xfile" ]; then
+      requires $1 GLEXEC_CREAM_LOG_FILE
+      ret_cod2=$?
+    fi
+ 
+    if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]; then
+      return 1
+    else
+      return 0
+    fi
+
+}
+
+function config_cream_glexec_setenv () {
+
+  yaimlog DEBUG "No enviroment variables to set."
+
+}
+
+function config_cream_glexec () {
+
+  GLITE_CREAM_LOCATION_SBIN=/usr/sbin
+  GLITE_CREAM_LOCATION_LIB64=/usr/lib64
+  GLITE_CREAM_LOCATION_LIB=/usr/lib
+  GLITE_CREAM_LOCATION_ETC=/etc
+
+  chown root.${GLEXEC_GROUP} ${GLITE_CREAM_LOCATION_SBIN}/glexec
+  chmod 6555 ${GLITE_CREAM_LOCATION_SBIN}/glexec
+
+  mkdir -p /var/log/glexec
+  chmod a+r /var/log/glexec
+  chmod o+s ${GLITE_CREAM_LOCATION_SBIN}/glexec 
+  mkdir -p /etc/ld.so.conf.d/
+
+
+  yaimlog DEBUG "Creating file  ${GLEXEC_CREAM_LCMAPS_CONFIG}/lcmaps-glexec.db ..."
+  SCRIPT="${GLEXEC_CREAM_LCMAPS_CONFIG}"
+  dir=`dirname "${GLEXEC_CREAM_LCMAPS_CONFIG}"`
+  if [ ! -d ${dir} ]; then
+    yaimlog DEBUG "Creating ${dir} ..."
+    mkdir -p ${dir}
+  fi
+
+  if [ -f $SCRIPT ]; then
+    cp $SCRIPT $SCRIPT.old
+  fi
+  #----------------------------------------------------------
+  # GLEXEC_CREAM_LCMAPS_CONFIG (lcmaps-glexec.db) - BEGIN
+  #----------------------------------------------------------
+# where to look for modules
+yaimlog DEBUG "OS_ARCH = ${OS_ARCH}"
+lcmapsmoddir=${GLITE_CREAM_LOCATION_LIB64}/lcmaps
+lcasmoddir=${GLITE_CREAM_LOCATION_LIB64}/lcas
+if [ ! -d $moddir ]; then
+# 32-bit installation
+lcmapsmoddir=${GLITE_CREAM_LOCATION_LIB}/lcmaps
+lcasmoddir=${GLITE_CREAM_LOCATION_LIB}/lcas
+fi 
+
+
+  cat << EOF > $SCRIPT
+# Written by Oscar Koeroo - okoeroo * at * nikhef * dot * nl
+# A new version of the gLExec configuration, only usable by glexec higher then version 0.6.0-1
+
+# where to look for modules
+path = $lcmapsmoddir
+
+# module definitions
+posix_enf = "lcmaps_posix_enf.mod"
+" -maxuid 1"
+" -maxpgid 1"
+" -maxsgid 32"
+
+localaccount = "lcmaps_localaccount.mod"
+" -gridmapfile ${GRIDMAPFILE}"
+
+poolaccount = "lcmaps_poolaccount.mod"
+" -override_inconsistency"
+" -gridmapfile ${GRIDMAPFILE}"
+" -gridmapdir ${GRIDMAPDIR}"
+
+vomslocalgroup = "lcmaps_voms_localgroup.mod"
+" -groupmapfile ${GROUPMAPFILE}"
+" -mapmin 0"
+
+vomslocalaccount = "lcmaps_voms_localaccount.mod"
+" -gridmapfile ${GRIDMAPFILE}"
+" -use_voms_gid"
+
+vomspoolaccount = "lcmaps_voms_poolaccount.mod"
+" -gridmapfile ${GRIDMAPFILE}"
+" -gridmapdir ${GRIDMAPDIR}"
+" -do_not_use_secondary_gids"
+
+
+proxycheck = "lcmaps_verify_proxy.mod"
+             "-certdir /etc/grid-security/certificates"
+
+
+# policies
+withvoms:
+proxycheck -> vomslocalgroup
+vomslocalgroup -> vomslocalaccount
+vomslocalaccount -> posix_enf | vomspoolaccount
+vomspoolaccount -> posix_enf
+
+standard:
+proxycheck -> localaccount
+localaccount -> posix_enf | poolaccount
+poolaccount -> posix_enf
+
+EOF
+  #----------------------------------------------------------
+  #  GLEXEC_CREAM_LCMAPS_CONFIG (lcmaps-glexec.db) - END
+  #----------------------------------------------------------
+
+  yaimlog DEBUG "Creating file  ${GLEXEC_CREAM_LCAS_CONFIG}/lcas-glexec.db ..."
+  SCRIPT="${GLEXEC_CREAM_LCAS_CONFIG}"
+  dir=`dirname "${GLEXEC_CREAM_LCAS_CONFIG}"`
+  if [ ! -d ${dir} ]; then
+    yaimlog DEBUG "creating ${dir}"
+    mkdir -p ${dir}
+  fi
+
+  if [ -f $SCRIPT ]; then
+    cp $SCRIPT $SCRIPT.old
+  fi
+  #----------------------------------------------------------
+  # GLEXEC_CREAM_LCAS_CONFIG (lcas-glexec.db) - BEGIN
+  #----------------------------------------------------------
+
+  BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+  my_batch_sys="pbs"
+  yaimlog DEBUG "BATCH_SYS=$BATCH_SYS"
+
+  if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+     my_batch_sys="pbs"
+  elif [ $BATCH_SYS = lsf ]; then
+     my_batch_sys="lsf"
+  elif [ $BATCH_SYS = slurm ]; then
+     my_batch_sys="slurm"
+  else
+     my_batch_sys=${BATCH_SYS}
+  fi
+
+  cat << EOF > $SCRIPT
+pluginname=${lcasmoddir}/lcas_voms.mod,pluginargs="-vomsdir /etc/grid-security/vomsdir/ -certdir /etc/grid-security/certificates -authfile ${GRIDMAPFILE} -authformat simple -use_user_dn"
+pluginname=${lcasmoddir}/lcas_check_executable.mod,pluginargs="-exec /usr/bin/id"
+EOF
+
+  #----------------------------------------------------------
+  #  GLEXEC_CREAM_LCAS_CONFIG (lcas-glexec.db) - END
+  #----------------------------------------------------------
+
+  yaimlog DEBUG "Creating file ${GLITE_CREAM_LOCATION_ETC}/glexec.conf ..."
+  SCRIPT="${GLITE_CREAM_LOCATION_ETC}/glexec.conf"
+  if [ -f $SCRIPT ]; then
+    cp $SCRIPT $SCRIPT.old
+  fi
+  #----------------------------------------------------------
+  # ${GLITE_CREAM_LOCATION_ETC}/glexec.conf - BEGIN
+  #----------------------------------------------------------
+  cat << EOF > $SCRIPT
+[glexec]
+linger = no
+
+lcmaps_db_file = ${GLEXEC_CREAM_LCMAPS_CONFIG}
+lcmaps_log_file = ${GLEXEC_CREAM_LCASLCMAPS_LOG}
+lcmaps_debug_level = 0
+lcmaps_log_level = 1
+
+lcas_db_file = ${GLEXEC_CREAM_LCAS_CONFIG}
+lcas_log_file = ${GLEXEC_CREAM_LCASLCMAPS_LOG}
+lcas_debug_level = 0
+lcas_log_level = 1
+
+log_level = 1
+user_identity_switch_by = lcmaps
+user_white_list = ${TOMCAT_USER}
+omission_private_key_white_list  = ${TOMCAT_USER}
+preserve_env_variables =
+create_target_proxy = no
+silent_logging = no
+log_destination = ${GLEXEC_CREAM_LOG_DESTINATION}
+log_file = ${GLEXEC_CREAM_LOG_FILE}
+
+EOF
+
+  #----------------------------------------------------------
+  # ${GLITE_CREAM_LOCATION_ETC}/glexec.conf - END
+  #----------------------------------------------------------
+
+chmod 640 ${GLITE_CREAM_LOCATION_ETC}/glexec.conf
+chown root.${GLEXEC_GROUP} ${GLITE_CREAM_LOCATION_ETC}/glexec.conf
+
+if [ "x${GLEXEC_CREAM_LOG_DESTINATION}" == "xfile" ]; then
+  ####@ Creating lcas/lcmaps glexec log file
+  if [ ! -d ${GLEXEC_CREAM_LOG_DIR} ]; then
+    yaimlog DEBUG "creating ${GLEXEC_CREAM_LOG_DIR}"
+    mkdir -p ${GLEXEC_CREAM_LOG_DIR}
+  fi
+  if [ ! -f ${GLEXEC_CREAM_LCASLCMAPS_LOG} ]; then
+    yaimlog DEBUG "Creating lcas/lcmaps glexec log file"
+    touch ${GLEXEC_CREAM_LCASLCMAPS_LOG}
+    # make sure it is not world-readable
+    chmod 640 ${GLEXEC_CREAM_LCASLCMAPS_LOG}
+  fi
+  if [ ! -f ${GLEXEC_CREAM_LOG_FILE} ]; then
+    yaimlog DEBUG "Creating glexec log file"
+    touch ${GLEXEC_CREAM_LOG_FILE}
+    #make sure it is not world-readable
+    chmod 640 ${GLEXEC_CREAM_LOG_FILE}
+    fi
+fi
+
+  return 0
+
+}

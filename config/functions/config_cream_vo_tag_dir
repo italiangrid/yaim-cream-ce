@@ -1,0 +1,118 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004. 
+# See http://www.eu-egee.org/partners/ for details on the copyright 
+# holders.  
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+#
+#    http://www.apache.org/licenses/LICENSE-2.0 
+#
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS 
+# OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_vo_tag_dir
+#
+# DESCRIPTION : This function configures the VO tag needed by the GIP.
+#
+# AUTHORS :     David.Smith@cern.ch
+#               Gergely.Debreczen@cern.ch
+#		massimo.sgaravatto@pd.infn.it	
+#
+# NOTES :      
+#
+# YAIM MODULE:  glite-yaim-cream-ce
+#                 
+##############################################################################
+
+function config_cream_vo_tag_dir_check (){
+
+  if [ "x${CREAM_CLUSTER_MODE}" = "xyes" ]; then
+    return 0
+  fi
+  requires $1 CLUSTERS CLUSTER__SUBCLUSTERS VOS
+
+}
+
+
+
+function config_cream_vo_tag_dir (){
+  if [ "x${CREAM_CLUSTER_MODE}" = "xyes" ]; then
+    yaimlog DEBUG "We are in cluster mode: don't run config_cream_vo_tag_dir"
+    return 0
+  fi
+
+for CLUSTER in ${CLUSTERS}; do
+
+  yaimlog DEBUG "Creating subcluster VO tag directory for cluster ${CLUSTER}"
+  CLUSTER=`echo ${CLUSTER} | sed -e 's/-/_/g' -e 's/\./_/g' | tr '[:lower:]' '[:upper:]'`
+  for SUBCLUSTER in `eval echo \\$CLUSTER_${CLUSTER}_SUBCLUSTERS`; do
+
+    yaimlog DEBUG "Creating subcluster VO tag directory for subcluster ${SUBCLUSTER}"
+
+    for VO in $VOS; do
+
+      yaimlog DEBUG "Creating subcluster VO tag directory for VO ${VO}"       
+      dir=/opt/glite/var/info/${SUBCLUSTER}/${VO}
+      mkdir -p $dir
+		  f=$dir/$VO.list
+		  [ -f $f ] || touch $f
+      # work out the sgm user for this VO
+      sgmusers=`users_getspecialusers $VO sgm`
+      sgmuser=`echo $sgmusers | cut -d " " -f 1`
+      vogroup=`users_getvogroup ${VO}`
+      sgmgroup=`users_getspecialgroup ${VO} sgm`
+	    sgmgroup=`id -g -n $sgmuser`
+	    chown -R ${sgmuser}:${sgmgroup} $dir
+      yaimlog DEBUG "$vogroup, $sgmgroup"
+      if [ "x$vogroup" = "x$sgmgroup" ]; then
+        yaimlog DEBUG "Removing grop writeability of files in $dir," 
+        yaimlog DEBUG "sgm's primary group is equal to pool account's primary group."
+    		chmod -R go-w $dir 
+      else
+        yaimlog DEBUG "Adding grop writeability of files in $dir," 
+        yaimlog DEBUG "sgm's primary group is different to pool account's primary group."
+		    chmod -R ug+rw,o-w $dir 
+      fi
+
+    done
+  done
+done
+
+# This code will be removed at some point. I don't integrate it with the previous code
+# so that it can be removed more easily.
+
+yaimlog DEBUG "Creating VO tag directories"
+
+    for VO in $VOS; do
+        dir=/opt/edg/var/info/$VO
+        mkdir -p $dir
+		f=$dir/$VO.list
+		[ -f $f ] || touch $f
+        # work out the sgm user for this VO
+        sgmusers=`users_getspecialusers $VO sgm`
+        sgmuser=`echo $sgmusers | cut -d " " -f 1`
+        vogroup=`users_getvogroup ${VO}`
+        sgmgroup=`users_getspecialgroup ${VO} sgm`
+
+	sgmgroup=`id -g -n $sgmuser`
+	chown -R ${sgmuser}:${sgmgroup} $dir
+        yaimlog DEBUG "$vogroup, $sgmgroup"
+        if [ "x$vogroup" = "x$sgmgroup" ]; then
+                yaimlog DEBUG "Removing grop writeability of files in $dir," 
+                yaimlog DEBUG "sgm's primary group is equal to pool account's primary group."
+		chmod -R go-w $dir 
+        else
+                yaimlog DEBUG "Adding grop writeability of files in $dir," 
+                yaimlog DEBUG "sgm's primary group is different to pool account's primary group."
+		chmod -R ug+rw,o-w $dir 
+        fi
+    done
+
+}

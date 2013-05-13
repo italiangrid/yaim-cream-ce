@@ -1,0 +1,63 @@
+function config_argus () {
+
+  # Input/Output file
+  CONF_FILE=$1
+
+  backup_file $CONF_FILE
+
+  # Count how much ARGUS_PEPD_ENDPOINTS are set
+  set count_pepd=0
+  for i in $ARGUS_PEPD_ENDPOINTS; do
+    let count_pepd=$count_pepd+1
+  done
+  echo "count_pepd=$count_pepd"
+
+  begin_tag="<argus-pep"
+  end_tag="</argus-pep>"
+
+  # Temporary output file
+  tmp_out_file="/tmp/argus-config.xml.tmp"
+  # Clean temporary output file
+  \rm ${tmp_out_file}  > /dev/null 2>&1
+
+  while read line; do
+    echo "$line" | grep "${begin_tag}"  > /dev/null 2>&1
+    if  [ $? = 0 ]; then
+      skip_row=true
+      continue
+    fi
+    echo "$line" | grep "${end_tag}" > /dev/null 2>&1
+    if [ $? = 0 ]; then
+
+      echo "<argus-pep name=\"pep-client1\"" >> ${tmp_out_file}
+      echo "        resource_id=\"${CREAM_PEPC_RESOURCEID}\"" >> ${tmp_out_file}
+      echo "        cert=\"${TOMCAT_HOSTCERT_LOCATION}\""     >> ${tmp_out_file}
+      echo "        key=\"${TOMCAT_HOSTKEY_LOCATION}\""       >> ${tmp_out_file}
+      echo "        passwd=\"\""                              >> ${tmp_out_file}
+      echo "        mapping_class=\"org.glite.ce.cream.ws.authz.ActionMapping\">" >> ${tmp_out_file}
+      if [ $count_pepd -gt 1 ]; then
+         for j in ${ARGUS_PEPD_ENDPOINTS}; do
+           echo "<pap-endpoint url=\"${j}\" />" >> ${tmp_out_file}
+         done
+      else if [ $count_pepd -eq 1 ]; then
+        echo "<pap-endpoint url=\"${ARGUS_PEPD_ENDPOINTS}\" />" >> ${tmp_out_file}
+      else
+        yaimlog ERROR "USE_ARGUS=yes but ARGUS_PEPD_ENDPOINTS not properly set"
+        exit ${YEX_CONFIG}
+      fi 
+      fi
+
+      echo "</argus-pep>"                                     >> ${tmp_out_file}
+
+      skip_row=false
+      continue
+    fi
+    if [ $skip_row == false ]; then
+      echo $line >> ${tmp_out_file}
+    fi
+  done < ${CONF_FILE}
+
+  mv ${tmp_out_file} ${CONF_FILE}
+
+}
+

@@ -1,0 +1,58 @@
+function config_authz () {
+
+auth_type=$1
+CONF_FILE=$2
+
+# Input/Output file
+if [ "`basename $CONF_FILE`" == "cream-config.xml" ] ; then
+    ARGUS_CONF_FILE="${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/cream-argus-config.xml"
+    AUTHZ_CONF_FILE="${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream/cream-authz-config.xml"
+else
+    ARGUS_CONF_FILE="${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-argus-config.xml"
+    AUTHZ_CONF_FILE="${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-authz-config.xml"
+fi
+
+backup_file $CONF_FILE
+
+# Temporary output file
+tmp_out_file="/tmp/cream-config.xml.tmp"
+# Clean temporary output file
+\rm ${tmp_out_file}  > /dev/null 2>&1
+
+# Remove authzchain tag and put argus-pep tag in cream-config.xml configuration file
+skip_row=false
+if [ $auth_type == "argus" ]; then
+  begin_tag="<authzchain"
+  end_tag="</authzchain>"
+  conf_to_add=${ARGUS_CONF_FILE}
+else if [ $auth_type == "authz" ]; then
+  begin_tag="<argus-pep"
+  end_tag="</argus-pep>"
+  conf_to_add=${AUTHZ_CONF_FILE}
+else
+  yaimlog ERROR "Authentication type not defined/correct."
+fi
+fi
+
+while read line; do
+  echo "$line" | grep "${begin_tag}"  > /dev/null 2>&1
+  if  [ $? = 0 ]; then
+    skip_row=true
+    continue
+  fi
+  echo "$line" | grep "${end_tag}" > /dev/null 2>&1
+  if [ $? = 0 ]; then
+
+    cat ${conf_to_add} >> ${tmp_out_file}
+    skip_row=false
+    continue
+  fi
+  if [ $skip_row == false ]; then
+    echo $line >> ${tmp_out_file}
+  fi
+done < ${CONF_FILE}
+mv ${tmp_out_file} ${CONF_FILE}
+
+}
+
+

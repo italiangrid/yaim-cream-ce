@@ -1,0 +1,55 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_db
+#
+# DESCRIPTION : This function configures cream CE databases: 
+#                creamdb and delegationdb.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+
+# This function has 1 input parameter:
+# #1 current_db
+
+function revoke_all_privileges() {
+
+current_db=$1
+
+db_users=`mysql -h ${CREAM_DB_HOST} -uroot  --password="${MYSQL_PASSWORD}" -e "select distinct db.User from mysql.db where db.Db='${current_db}';"`
+
+for a_user in ${db_users}; do
+  if [ "${a_user}" = "User" ]; then
+    continue
+  fi
+  a_user_hosts=`mysql -h ${CREAM_DB_HOST} -uroot --password="${MYSQL_PASSWORD}" -e "select db.Host from mysql.db where db.Db='${current_db}' AND db.user='${a_user}';"`
+
+  for a_host in ${a_user_hosts}; do
+    if [ "${a_host}" = "Host" ]; then
+      continue
+    fi
+    mysql -h ${CREAM_DB_HOST} -uroot --password="${MYSQL_PASSWORD}" -e "revoke all privileges on ${current_db}.* from ${a_user}@'${a_host}';"
+  done
+done
+}
+

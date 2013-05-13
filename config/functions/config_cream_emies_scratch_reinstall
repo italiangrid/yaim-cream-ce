@@ -1,0 +1,103 @@
+#!/bin/bash
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_emies_scratch_reinstall
+#
+# DESCRIPTION : This function configures the Cream EMI-ES service
+#
+# AUTHORS :     massimo.sgaravatto@pd.infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+
+##############################################################################
+
+function config_cream_emies_scratch_reinstall_check () {
+  requires $1 USE_EMIES
+}
+
+function config_cream_emies_scratch_reinstall_setenv () {
+ yaimlog DEBUG "This function doesn't set any environment variables"
+}
+
+function config_cream_emies_scratch_reinstall () {
+
+if [ ${USE_EMIES} = false ]; then
+  yaimlog DEBUG "Removing EMI-ES, if installed"
+  
+  rm -Rf ${CATALINA_HOME}/webapps/ce-cream-es
+  if [ -e ${CATALINA_HOME}/conf/Catalina/localhost/ce-cream-es.xml ] ; then
+    rm -f ${CATALINA_HOME}/conf/Catalina/localhost/ce-cream-es.xml
+  fi
+
+  return 0
+fi
+
+
+yaimlog DEBUG "Reinstall EMI-ES if needed"
+
+if [ ! -L ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/glite-ce-cream-es.aar ] ; then
+
+  cp -R /usr/share/axis2/webapp ${CATALINA_HOME}/webapps/ce-cream-es || exit 1
+
+  ln -s /usr/share/java/jclassads/cedar.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/jclassads/classad.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/argus-pep-api-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/argus-pep-common.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/trustmanager.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/bcprov.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/delegation-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+ ln -s /usr/share/java/glite-ce-common-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-ce-cream-api-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-ce-cream-blahExecutor.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-ce-cream-core.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-ce-cream-delegationExecutor.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-ce-cream-es-skeleton.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-ce-delegation-skeleton.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+  ln -s /usr/share/java/glite-jdl-api-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
+
+  # customization of axis2.conf
+  REPLACE1='s|__CHANGE_SERVICE__|/etc/glite-ce-cream-es/cream-config.xml|g'
+  REPLACE2='s|__CHANGE_LOG4J__|/etc/glite-ce-cream-es/log4j.properties|g'
+  TMPPWD=`openssl rand -base64 15`
+ REPLACE3='s|__CHANGE_PWD__|'$TMPPWD'|g'
+
+  sed "$REPLACE1 ; $REPLACE2 ; $REPLACE3" /etc/glite-ce-common-java/axis2.xml > ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/conf/axis2.xml
+
+  # cannot use symlinks for the following files:
+  cp -f /etc/glite-ce-common-java/web.xml ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/
+
+  ln -s /usr/share/glite-ce-cream/modules/glite-ce-cream-authorization.mar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules
+  rm ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/modules.list
+  for item in `ls ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/*.mar`; do
+    echo `basename $item` >> ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/modules.list ;
+ done
+
+  ln -s /usr/share/glite-ce-cream/services/glite-ce-cream-es.aar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services
+  rm ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/services.list
+  for item in `ls ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/*.aar`; do
+    echo `basename $item` >> ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/services.list ;
+  done
+
+fi
+
+return 0
+
+
+}

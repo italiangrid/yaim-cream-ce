@@ -1,0 +1,89 @@
+
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_glexec_user 
+#
+# DESCRIPTION : This function creates the glexec user on a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_glexec_user_check () {
+
+  requires $1 GLEXEC_GROUP GLEXEC_USER CONFIG_USERS
+}
+
+function config_cream_glexec_user_setenv () {
+
+  yaimlog DEBUG "No enviroment variables to set."
+
+}
+
+function config_cream_glexec_user () {
+
+yaimlog INFO "CONFIG_USERS is set to $CONFIG_USERS"
+
+retval=0
+
+if [ "x${CONFIG_USERS}" = "xyes" ]; then
+#  if ! (getent group ${GLEXEC_GROUP} | grep ${GLEXEC_GROUP} > /dev/null)
+#    then
+#      yaimlog INFO "Creating group ${GLEXEC_GROUP}"
+#      groupadd ${GLEXEC_GROUP} 2>/dev/null
+#  fi
+#  if ! (getent passwd | grep ${GLEXEC_USER} > /dev/null)
+#    then
+#      yaimlog INFO "Creating user ${GLEXEC_USER}"
+#      useradd -s /sbin/nologin -g ${GLEXEC_GROUP} -d  ${CREAM_GLEXEC_USER_HOME} ${GLEXEC_USER} 2>/dev/null
+#      #useradd -g glexec -s /bin/bash glexec
+#  fi
+
+  getent group  ${GLEXEC_GROUP} >/dev/null || groupadd -r  ${GLEXEC_GROUP}  2>/dev/null
+  getent passwd ${GLEXEC_USER} >/dev/null || useradd -r -g  ${GLEXEC_GROUP} -d ${CREAM_GLEXEC_USER_HOME} -s /sbin/nologin ${GLEXEC_USER}  2>/dev/null
+
+else
+  yaimlog WARNING "CONFIG_USERS is set to 'no'. User ${GLEXEC_USER} and group ${GLEXEC_GROUP} must exist in your system"
+  if ! (getent passwd | grep ${GLEXEC_USER} > /dev/null)
+    then
+      yaimlog ERROR "User ${GLEXEC_USER} doesn't exist and CONFIG_USERS is set to 'no'. Please, create ${GLEXEC_USER} user"
+      yestr ${YEX_NOUSER}
+      yaimlog ERROR "${YERRORSTR}"
+      retval=1
+    else
+      if ! (getent group | grep ${GLEXEC_GROUP} > /dev/null)
+        then
+          yaimlog ERROR "Group ${GLEXEC_GROUP} doesn't exist and CONFIG_USERS is set to 'no'. Please, create ${GLEXEC_GROUP} group"
+          yestr ${YEX_NOUSER}
+          yaimlog ERROR "${YERRORSTR}"
+          retval=1
+    fi
+  fi
+  if [ $retval -ne 0 ]; then
+      exit 1
+  fi
+
+fi 
+
+  return 0
+
+}

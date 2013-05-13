@@ -1,0 +1,152 @@
+#!/bin/bash
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_cemon
+#
+# DESCRIPTION : This function configures CEMON service of a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_cemon_check () {
+
+  requires $1 USE_CEMON 
+  ret_cod1=$?
+
+  if [ "x${USE_CEMON}" == "xtrue" ]; then
+    requires $1 USE_ARGUS TOMCAT_HOSTCERT_LOCATION TOMCAT_HOSTKEY_LOCATION
+    ret_cod2=$?
+  fi
+
+  if [ "x${USE_ARGUS}" == "xyes" ]; then
+    requires $1 ARGUS_PEPD_ENDPOINTS CREAM_PEPC_RESOURCEID
+    ret_cod3=$?
+  fi
+
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ] || [ ! $ret_cod3 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+}
+
+function config_cream_cemon_setenv () {
+
+  yaimlog DEBUG "No enviroment variables to set."
+
+}
+
+function config_cream_cemon () {
+
+
+GLITE_CREAM_LOCATION_ETC=/etc
+
+if [ ${USE_CEMON} = true ]; then 
+
+  yaimlog DEBUG "Configuration of ${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-config.xml ..."
+
+  backup_file "${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-config.xml"
+
+  CEMON_XML_TMP=${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-config-tmp.xml
+
+
+ if [ ${USE_ARGUS} = yes ]; then
+      CEMON_XML_TEMPLATE=${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-config-argus.xml.template
+   else
+      CEMON_XML_TEMPLATE=${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-config-gjaf.xml.template
+   fi
+
+
+  cat ${CEMON_XML_TEMPLATE} | sed \
+     -e "s|TOMCAT_HOSTCERT_LOCATION|${TOMCAT_HOSTCERT_LOCATION}|" \
+     -e "s|TOMCAT_HOSTKEY_LOCATION|${TOMCAT_HOSTKEY_LOCATION}|" \
+   > ${CEMON_XML_TMP}
+
+  if [ ${USE_ARGUS} = yes ]; then
+    # Other substitutions are needed here
+
+     # There can be multiple Argus PEPD endpoints
+    endpoints=""
+    for j in ${ARGUS_PEPD_ENDPOINTS}; do
+      endpoints="$endpoints    <endpoint url=\"${j}\" />\n"
+    done
+
+
+    cat ${CEMON_XML_TMP} | sed \
+      -e "s|CREAM_PEPC_RESOURCEID|${CREAM_PEPC_RESOURCEID}|" \
+      -e "s|    <endpoint url=\"ARGUS_PEPD_ENDPOINTS\" />|${endpoints}|" \
+    > ${GLITE_CREAM_LOCATION_ETC}//glite-ce-monitor/cemonitor-config.xml
+    rm ${CEMON_XML_TMP}
+  else
+    mv ${CEMON_XML_TMP} ${GLITE_CREAM_LOCATION_ETC}/glite-ce-monitor/cemonitor-config.xml
+  fi
+
+  yaimlog DEBUG "Reinstall CEMon if needed"
+  if [ ! -L ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/services/glite-ce-monitor.aar ] ; then
+    cp -R /usr/share/axis2/webapp ${CATALINA_HOME}/webapps/ce-monitor || exit 1
+  
+    ln -s /usr/share/java/jclassads/cedar.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/jclassads/classad.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/argus-pep-api-java.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/argus-pep-common.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/trustmanager.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/vomsjapi.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/bcprov.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/glite-ce-common-java.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/glite-ce-monitor-api-java.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    ln -s /usr/share/java/glite-ce-monitor.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+    # Temporary workaround; trustmanager-axis2 will be a runtime dependency
+    ln -s /usr/share/java/glite-security-trustmanager-axis2.jar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/lib
+  
+    # cannot use symlinks for the following files:
+    cp -f /etc/glite-ce-common-java/axis2.xml ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/conf
+    cp -f /etc/glite-ce-common-java/web.xml ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/
+    cp -f /etc/glite-ce-monitor/log4j.properties ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/classes
+
+    ln -s /usr/share/glite-ce-monitor/modules/glite-ce-monitor-authorization.mar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/modules
+    rm ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/modules/modules.list
+    for item in `ls ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/modules/*.mar`; do 
+      echo `basename $item` >> ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/modules/modules.list ; 
+    done
+
+    ln -s /usr/share/glite-ce-monitor/services/glite-ce-monitor.aar ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/services
+    rm ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/services/services.list
+    for item in `ls ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/services/*.aar`; do 
+      echo `basename $item` >> ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/services/services.list ; 
+    done
+  fi
+
+  return 0
+
+else # do not deploy CEMon; remove it if already installed
+  yaimlog DEBUG "Removing cemon, if installed"
+
+  rm -Rf ${CATALINA_HOME}/webapps/ce-monitor
+  if [ -e ${CATALINA_HOME}/conf/Catalina/localhost/ce-monitor.xml ] ; then
+    rm -f ${CATALINA_HOME}/conf/Catalina/localhost/ce-monitor.xml
+  fi
+
+  return 0
+fi
+}

@@ -1,0 +1,76 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2009. 
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.  
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0 
+# 
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_gliteservices
+#
+# DESCRIPTION : This function configures start services at init.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+
+function config_cream_gliteservices_check () {
+
+  requires $1 CE_HOST BLPARSER_WITH_UPDATER_NOTIFIER
+  ret_cod1=$?
+  if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} == false ]; then
+    requires $1 BLPARSER_HOST
+    ret_cod2=$?
+  fi
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+ 
+}
+
+function config_cream_gliteservices_setenv () {
+
+  yaimlog DEBUG "This function currently doesn't set any environment variables."
+
+}
+
+function config_cream_gliteservices () {
+
+GLITE_CREAM_LOCATION_ETC=/etc 
+
+
+if [ ! -f ${GLITE_CREAM_LOCATION_ETC}/gLiteservices ] ; then
+  touch ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+fi
+
+if [ ! -f ${GLITE_CREAM_LOCATION_ETC}/init.d/${TOMCAT_VERSION} ] ; then
+  ln -s /etc/init.d/${TOMCAT_VERSION} ${GLITE_CREAM_LOCATION_ETC}/init.d/${TOMCAT_VERSION}
+fi
+if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} == false ]; then
+  if [ ${BLPARSER_HOST} == ${CE_HOST} ]; then
+    echo "${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser " >> ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+    echo "${GLITE_CREAM_LOCATION_ETC}/init.d/${TOMCAT_VERSION} " >> ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+  else 
+    echo  "${GLITE_CREAM_LOCATION_ETC}/init.d/${TOMCAT_VERSION} " >> ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+  fi
+else
+  echo "${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser" >> ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+  echo "${GLITE_CREAM_LOCATION_ETC}/init.d/${TOMCAT_VERSION}" >> ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+fi
+
+}

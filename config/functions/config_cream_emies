@@ -1,0 +1,189 @@
+#!/bin/bash
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_emies
+#
+# DESCRIPTION : This function configures the Cream EMI-ES service
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_emies_check () {
+
+  requires $1 USE_EMIES
+  ret_cod1=$?
+   
+  if [ "x${USE_EMIES}" == "xtrue" ]; then
+    requires $1 CREAM_DB_PASSWORD CREAM_DB_USER BLAH_JOBID_PREFIX_ES \
+           CREAM_DB_HOST USERS_CONF VOS TOMCAT_USER CREAM_ES_SANDBOX_PATH \
+           USE_ARGUS TOMCAT_HOSTKEY_LOCATION TOMCAT_HOSTCERT_LOCATION \
+	   CREAM_CONCURRENCY_LEVEL CREAM_ES_DB_NAME DELEGATION_ES_DB_NAME \
+	   CE_BATCH_SYS DEFAULT_QUEUE CREAM_DATASOURCE_FACTORY CE_HOST
+  ret_cod2=$?
+  fi
+
+  if [ "x${USE_ARGUS}" == "xyes" ]; then
+    requires $1 ARGUS_PEPD_ENDPOINTS CREAM_PEPC_RESOURCEID
+    ret_cod3=$?
+  fi
+
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]  || [ ! $ret_cod3 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+}
+
+function config_cream_emies_setenv () {
+  
+  yaimlog DEBUG "This function doesn't set any environment variables"
+}
+
+
+function config_cream_emies () {
+
+
+if [ ${USE_EMIES} = false ]; then
+  yaimlog DEBUG "Removing EMI-ES, if installed"
+  
+  rm -Rf ${CATALINA_HOME}/webapps/ce-cream-es
+  if [ -e ${CATALINA_HOME}/conf/Catalina/localhost/ce-cream-es.xml ] ; then
+    rm -f ${CATALINA_HOME}/conf/Catalina/localhost/ce-cream-es.xml
+  fi
+
+  return 0
+fi
+
+
+
+GLITE_CREAM_LOCATION_ETC=/etc
+
+
+  yaimlog DEBUG "Create EMI-ES sandbox for supported vo/groups"
+  mkdir -p ${CREAM_ES_SANDBOX_PATH}
+  chown ${TOMCAT_USER}:${TOMCAT_USER} ${CREAM_ES_SANDBOX_PATH}
+  chmod 775 ${CREAM_ES_SANDBOX_PATH}
+
+  if [ ! -e $USERS_CONF ]; then
+    yaimlog ERROR "$USERS_CONF not found."
+    return 1
+  fi
+ 
+
+  supported_groups=`mktemp /tmp/yaim.XXXXXX`
+  for vo in $VOS; do
+    awk -F : '{if($5=="'$vo'") print $4}' $USERS_CONF | cut -d ',' -f1 | sort | uniq >> ${supported_groups}
+  done
+
+  for a_group in `cat ${supported_groups}`; do
+
+    mkdir -p ${CREAM_ES_SANDBOX_PATH}/${a_group}
+    chown ${TOMCAT_USER}.${a_group} ${CREAM_ES_SANDBOX_PATH}/${a_group}
+    chmod 770 ${CREAM_ES_SANDBOX_PATH}/${a_group}
+  done
+
+
+  #================================================================
+  # ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml - BEGIN
+  #================================================================
+
+  yaimlog DEBUG "Configuration of ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml ..."
+
+  backup_file "${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml"
+
+
+   if [ ${USE_ARGUS} = yes ]; then
+      CREAM_ES_XML_TEMPLATE=${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-es-config-argus.xml.template
+   else
+      CREAM_ES_XML_TEMPLATE=${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-es-config-gjaf.xml.template
+   fi
+
+   if [ ! -f ${CREAM_ES_XML_TEMPLATE} ]; then
+    yaimlog ERROR "Cream config template ${CREAM_XML_TEMPLATE} file does not exists. Please, verify your installation"
+    exit 1
+  fi 
+
+
+   CREAM_ES_XML_TMP=${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config-tmp.xml 
+
+
+BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+  if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+     my_batch_sys="pbs"
+else
+     my_batch_sys=${BATCH_SYS}
+fi
+
+    RES_BDII_URI="ldap://${CE_HOST}:${RES_BDII_PORT:-2170}"
+    #Use the BDII breath time as refresh rate
+    RES_BDII_RATE=$[${BDII_BREATHE_TIME:-3600} / 60]
+
+   cat ${CREAM_ES_XML_TEMPLATE} | sed \
+      -e "s|<parameter name=\"DEFAULT_LRMS_NAME\" value=.*|<parameter name=\"DEFAULT_LRMS_NAME\" value=\"$my_batch_sys\" \/>|" \
+      -e "s|<parameter name=\"DEFAULT_QUEUE_NAME\" value=.*|<parameter name=\"DEFAULT_QUEUE_NAME\" value=\"${DEFAULT_QUEUE}\" \/>|" \
+      -e "s/url=\"jdbc:mysql:\/\/localhost:3306\/delegationesdb/url=\"jdbc:mysql:\/\/${CREAM_DB_HOST}:3306\/${DELEGATION_ES_DB_NAME}/" \
+      -e "s/url=\"jdbc:mysql:\/\/localhost:3306\/esdb/url=\"jdbc:mysql:\/\/${CREAM_DB_HOST}:3306\/${CREAM_ES_DB_NAME}/" \
+      -e "s/username=\"SetThisToAUser\" password=\"SetThisToAGoodPassword\"/username=\"${CREAM_DB_USER}\" password=\"${CREAM_DB_PASSWORD}\"/" \
+      -e "s/factory=\"org.apache.tomcat.dbcp.dbcp.BasicDataSourceFactory\"/factory=\"${CREAM_DATASOURCE_FACTORY}\"/" \
+      -e "s/<parameter name=\"BLAH_PREFIX\" value=.*/<parameter name=\"BLAH_PREFIX\" value=\"$BLAH_JOBID_PREFIX_ES\" \/>/" \
+    -e "s|<parameter name=\"CREAM_SANDBOX_DIR\" value=.*|<parameter name=\"CREAM_SANDBOX_DIR\" value=\"$CREAM_ES_SANDBOX_PATH\" \/>|" \
+    -e "s|<parameter name=\"SANDBOX_DIR\" value=.*|<parameter name=\"SANDBOX_DIR\" value=\"$CREAM_ES_SANDBOX_PATH\" \/>|" \
+    -e "s|commandworkerpoolsize=\"50\"|commandworkerpoolsize=\"$CREAM_CONCURRENCY_LEVEL\"|" \
+    -e "s|<parameter name=\"BDII_URI\" value=.*|<parameter name=\"BDII_URI\" value=\"${RES_BDII_URI}\"/>|" \
+    -e "s|<parameter name=\"BDII_RATE\" value=.*|<parameter name=\"BDII_RATE\" value=\"${RES_BDII_RATE}\"/><!-- min. -->|" \
+   > ${CREAM_ES_XML_TMP}
+
+  if [ ${USE_ARGUS} = yes ]; then
+    # Other substitutions are needed here
+
+    # There can be multiple Argus PEPD endpoints
+    endpoints=""
+    for j in ${ARGUS_PEPD_ENDPOINTS}; do
+      endpoints="$endpoints    <endpoint url=\"${j}\" />\n"
+    done
+
+    cat ${CREAM_ES_XML_TMP} | sed \
+      -e "s|CREAM_PEPC_RESOURCEID|${CREAM_PEPC_RESOURCEID}|" \
+      -e "s|TOMCAT_HOSTCERT_LOCATION|${TOMCAT_HOSTCERT_LOCATION}|" \
+      -e "s|TOMCAT_HOSTKEY_LOCATION|${TOMCAT_HOSTKEY_LOCATION}|" \
+      -e "s|    <endpoint url=\"ARGUS_PEPD_ENDPOINTS\" />|${endpoints}|" \
+    > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml
+    rm ${CREAM_ES_XML_TMP}
+  else
+    mv ${CREAM_ES_XML_TMP} ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml
+  fi 
+
+
+  chown ${TOMCAT_USER}:${TOMCAT_USER} ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml
+  chmod 0600 ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml
+
+
+  #================================================================
+  # ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/cream-config.xml - END
+  #================================================================
+
+
+  return 0
+
+}
