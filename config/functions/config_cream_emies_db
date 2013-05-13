@@ -1,0 +1,210 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_db
+#
+# DESCRIPTION : This function configures cream CE databases: 
+#                creamdb and delegationdb.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_emies_db_check () {
+
+  requires $1 USE_EMIES
+  ret_cod1=$?
+
+  if [ ${USE_EMIES} = true ]; then
+   requires $1 MYSQL_PASSWORD CREAM_DB_USER ACCESS_BY_DOMAIN MY_DOMAIN \
+    CREAM_ES_SANDBOX_PATH CREAM_DB_HOST CREAM_DB_PASSWORD \
+    RESET_CREAM_DB_GRANTS CREAM_ES_DB_NAME DELEGATION_ES_DB_NAME 
+    ret_cod2=$?
+  fi
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+}
+
+function config_cream_emies_db_setenv () {
+  yaimlog DEBUG "No enviroment variables to set."
+}
+
+function config_cream_emies_db () {
+
+  if [ ${USE_EMIES} = false ]; then
+    yaimlog DEBUG "Not configuring databases for EMI-ES since EMI-ES hasn't to be deployed"
+    return 0
+  fi
+
+
+  GLITE_CREAM_LOCATION_ETC=/etc
+
+  HOSTNAME=`hostname -f`
+
+
+  yaimlog DEBUG "Sourcing /etc/glite-ce-cream-es/service.properties where the needed emi-es-creamdb, emi-es-delegationdb, emi-es-storedprocdb versions are specified"
+  . /etc/glite-ce-cream-es/service.properties
+
+
+  if [ x = x${creamesdb_version} ]; then
+    yaimlog ERROR "esdbDatabaseVersion not found !"
+    return 1
+  fi
+
+  if [ x = x${delegationesdb_version} ]; then
+    yaimlog ERROR "delegationdbDatabaseVersion not found !"
+    return 1
+  fi
+
+  if [ x = x${esstoredprocdb_version} ]; then
+    yaimlog ERROR "esdbStoredProcedureVersion not found !"
+    return 1
+  fi
+
+
+  yaimlog DEBUG "Grants on Cream ES DB ..."
+
+  if [ ${RESET_CREAM_DB_GRANTS} = "yes" ]; then
+    revoke_all_privileges ${CREAM_ES_DB_NAME}
+  fi
+  grant_privileges ${CREAM_ES_DB_NAME} ${CREAM_DB_USER} ${CREAM_DB_PASSWORD}
+
+
+
+  yaimlog DEBUG "Grants on EMI-ES DelegationDB ..."
+
+  if [ ${RESET_CREAM_DB_GRANTS} = "yes" ]; then
+    revoke_all_privileges ${DELEGATION_ES_DB_NAME}
+  fi
+  grant_privileges ${DELEGATION_ES_DB_NAME} ${CREAM_DB_USER} ${CREAM_DB_PASSWORD}
+
+
+  yaimlog DEBUG "Additional grants for EMI-ES ..."
+
+  HOSTNAME=`hostname -f`
+  mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT SELECT on mysql.proc to ${CREAM_DB_USER}@'localhost' IDENTIFIED BY '${CREAM_DB_PASSWORD}';"
+  mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT SELECT on mysql.proc to ${CREAM_DB_USER}@'$HOSTNAME' IDENTIFIED BY '${CREAM_DB_PASSWORD}';"
+
+
+
+  yaimlog DEBUG "Create or update database Cream ES DB, if needed ..."
+
+  # Use custom db name in sql script
+  cat  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_mysql.sql | sed \
+     -e "s/esdb/${CREAM_ES_DB_NAME}/" \
+  > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_mysql.tmp.sql
+
+  sh /usr/bin/createAndPopulateDB.sh ${CREAM_DB_USER} ${CREAM_DB_PASSWORD} ${CREAM_ES_DB_NAME} ${creamesdb_version} 'N' "${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_mysql.tmp.sql" ${CREAM_DB_HOST} ${CREAM_ES_SANDBOX_PATH}
+   if [ ! $? = 0 ] ; then
+       yaimlog ERROR "Creation of Cream EMI-ES DB failed"
+       return 1 
+  fi
+
+  rm ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_mysql.tmp.sql
+
+
+
+  yaimlog DEBUG "Create or update DelegationDB, if needed ..."
+  # Use custom db name in sql script
+  cat  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_delegationesdb.sql | sed \
+     -e "s/delegationesdb/${DELEGATION_ES_DB_NAME}/" \
+  > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_delegationesdb.tmp.sql
+
+  sh /usr/bin/createAndPopulateDB.sh ${CREAM_DB_USER} ${CREAM_DB_PASSWORD} ${DELEGATION_ES_DB_NAME} ${delegationesdb_version} 'N' "${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_delegationesdb.tmp.sql" ${CREAM_DB_HOST}
+
+   if [ ! $? = 0 ] ; then
+       yaimlog ERROR "Creation of Delegation EMI-ES DB failed"
+       return 1 
+  fi
+  rm ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_delegationesdb.tmp.sql
+
+
+  yaimlog DEBUG "Create or update EMI-ES Stored Procedures DB, if needed ..."
+  # Use custom db name in sql script
+  cat  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_stored_proc.sql | sed \
+     -e "s/esdb;/${CREAM_ES_DB_NAME};/" \
+  > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_stored_proc.tmp.sql
+
+  sh /usr/bin/createAndPopulateDB.sh ${CREAM_DB_USER} ${CREAM_DB_PASSWORD} ${CREAM_ES_DB_NAME} ${esstoredprocdb_version} 'S' "${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_stored_proc.tmp.sql" ${CREAM_DB_HOST}
+
+   if [ ! $? = 0 ] ; then
+       yaimlog ERROR "Creation of EMI-ES Stored Procedures DB failed"
+       return 1 
+  fi
+  rm ${GLITE_CREAM_LOCATION_ETC}/glite-ce-cream-es/populate_esdb_stored_proc.tmp.sql
+
+
+
+
+  return 0
+}
+
+
+
+# This function has 4 input parameters:
+# #1 db_name_grant
+# #2 db_user_grant
+# #3 db_password_grant
+
+function grant_privileges() {
+
+  db_name_grant=$1
+  db_user_grant=$2
+  db_password_grant=$3
+
+    # grants access to db_name to user db_user and creates it
+    mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name_grant}.* to ${db_user_grant}@localhost IDENTIFIED BY '${db_password_grant}' WITH GRANT OPTION;"
+    mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name_grant}.* to ${db_user_grant}@'$HOSTNAME' IDENTIFIED BY '${db_password_grant}' WITH GRANT OPTION;"
+
+    # optionally grants privileges to monitor the database accessing from external hosts
+    if [ "$ACCESS_BY_DOMAIN" = "yes" ]; then
+      mysql -h ${CREAM_DB_HOST} -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name_grant}.* to ${CREAM_DB_USER}@'%.$MY_DOMAIN' IDENTIFIED BY '${CREAM_DB_PASSWORD}' WITH GRANT OPTION;"
+    fi
+}
+
+# This function has 1 input parameter:
+# #1 current_db
+
+function revoke_all_privileges() {
+
+current_db=$1
+
+db_users=`mysql -h ${CREAM_DB_HOST} -uroot  --password="${MYSQL_PASSWORD}" -e "select distinct db.User from mysql.db where db.Db='${current_db}';"`
+
+for a_user in ${db_users}; do
+  if [ "${a_user}" = "User" ]; then
+    continue
+  fi
+  a_user_hosts=`mysql -h ${CREAM_DB_HOST} -uroot --password="${MYSQL_PASSWORD}" -e "select db.Host from mysql.db where db.Db='${current_db}' AND db.user='${a_user}';"`
+
+  for a_host in ${a_user_hosts}; do
+    if [ "${a_host}" = "Host" ]; then
+      continue
+    fi
+    mysql -h ${CREAM_DB_HOST} -uroot --password="${MYSQL_PASSWORD}" -e "revoke all privileges on ${current_db}.* from ${a_user}@'${a_host}';"
+  done
+done
+}
+

@@ -1,0 +1,45 @@
+# This function has 4 input parameters:
+# #1 db_name
+# #2 db_user
+# #3 db_password
+# #4 sql_input_file with complete path (database initialization script - sql)
+ 
+function create_mysql_db () {
+ 
+  db_name=$1
+  db_user=$2
+  db_password=$3
+  sql_input_file=$4
+  
+  # Check if database db_name exist
+  mysqlshow --password="$MYSQL_PASSWORD" | grep "$db_name" > /dev/null 2>&1
+ 
+  if [ ! $? = 0 ]; then
+    # Creates db_name database
+    mysql -u root --password="$MYSQL_PASSWORD" -e "CREATE DATABASE $db_name"
+ 
+    # populates the database:
+    mysql --password="$MYSQL_PASSWORD" $db_name < $sql_input_file
+ 
+    # grants access to db_name to user db_user and creates it
+    mysql -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name}.* to ${db_user} IDENTIFIED BY '${db_password}' WITH GRANT OPTION;"
+    mysql -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name}.* to ${db_user}@localhost IDENTIFIED BY '${db_password}' WITH GRANT OPTION;"
+    mysql -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name}.* to ${db_user}@'$HOSTNAME' IDENTIFIED BY '${db_password}' WITH GRANT OPTION;"
+ 
+    # optionally grants privileges to monitor the database accessing from external hosts
+    if [ "$ACCESS_BY_DOMAIN" = "true" ]; then
+                                                                                                                                        
+      # <hostname> is the host allowed to access the mysql server:
+      # %               means that every host has access
+      # %.pd.infn.it    means that every host in the pd.infn.it domain has access
+      # mypc.pd.infn.it means that only the mypc host has access
+      mysql -u root --password="$MYSQL_PASSWORD" -e "GRANT ALL PRIVILEGES on ${db_name}.* to ${db_user}@'%.pd.infn.it' IDENTIFIED BY '${db_password}' WITH GRANT OPTION;"
+    fi
+ 
+  else
+    yaimlog "Database ${db_name} already exists"
+  fi
+ 
+  return 0
+
+}

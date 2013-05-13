@@ -1,0 +1,106 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2009. 
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.  
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0 
+# 
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_logrotation
+#
+# DESCRIPTION : This function configures log file rotation.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+
+function config_cream_logrotation_check () {
+
+  requires $1 GLEXEC_CREAM_LOG_DESTINATION GLEXEC_CREAM_LCASLCMAPS_LOG \
+           SUDO_CREAM_LOG_DESTINATION 
+  ret_cod1=$?
+  if [ "x${GLEXEC_CREAM_LOG_DESTINATION}" == "xfile" ]; then
+    requires $1 GLEXEC_CREAM_LOG_FILE
+    ret_cod2=$?
+  fi
+
+  if [ "x${SUDO_CREAM_LOG_DESTINATION}" == "xfile" ]; then
+    requires $1 SUDO_CREAM_LOG_FILE
+    ret_cod3=$?
+  fi
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ] || [ ! $ret_cod3 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+}
+
+function config_cream_logrotation_setenv () {
+
+  yaimlog DEBUG "This function currently doesn't set any environment variables."
+
+}
+
+function config_cream_logrotation () {
+
+# glexec log file rotation
+config_file_rotation ${GLEXEC_CREAM_LOG_DESTINATION} "/etc/logrotate.d/glexec" ${GLEXEC_CREAM_LOG_FILE} "10M"
+
+# lcas-lcmaps log file rotation
+config_file_rotation ${GLEXEC_CREAM_LOG_DESTINATION} "/etc/logrotate.d/lcas_lcmaps" ${GLEXEC_CREAM_LCASLCMAPS_LOG} "10M"
+
+# sudo log file rotation
+config_file_rotation ${SUDO_CREAM_LOG_DESTINATION} "/etc/logrotate.d/sudoer" ${SUDO_CREAM_LOG_FILE} "10M"
+
+# Set hourly cron for logrotate
+if [[ ! -f /etc/cron.hourly/logrotate ]]; then
+  mv -f `find /etc -name logrotate` /etc/cron.hourly/
+fi
+
+}
+
+# This function configures file rotation. 
+# Input parameters:
+# #1 log_destination
+# #2 config_rotate_file_name
+# #3 file_to_rotate_name
+# #4 f_size
+
+function config_file_rotation () {
+
+log_destination=$1
+
+if [ "x${log_destination}" == "xfile" ]; then
+
+  config_rotate_file_name=$2
+  file_to_rotate_name=$3
+  f_size=$4
+
+    cat << EOF > ${config_rotate_file_name}
+${file_to_rotate_name} {
+        copytruncate
+        rotate 50
+        size = 10M
+        compress
+        missingok
+        nomail
+        delaycompress
+}
+EOF
+
+fi
+
+}

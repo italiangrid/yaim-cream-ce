@@ -1,0 +1,140 @@
+#!/bin/bash
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders. 
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :   	config_gip_info_dynamic
+#        
+# DESCRIPTION : This function configures the info dynamic plugin 
+#               for a Computing Element (CE) node.
+#
+# AUTHORS :     yaim-contact@cern.ch, massimo.sgaravatto@pd.infn.it
+#
+# NOTES :       
+#
+# YAIM MODULE:  glite-yaim-cream-ce
+#                
+############################################################################## 
+
+config_cream_gip_info_dynamic_check () {
+
+ requires $1 CE_BATCH_SYS BATCH_BIN_DIR \
+        CREAM_CE_STATE 
+ ret_cod1=$?
+
+  BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+  if [ "x$BATCH_SYS" == "xlsf" ]; then
+    requires $1 BATCH_BIN_DIR LSFPROFILE_DIR
+    ret_cod2=$?
+  else if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+    requires $1 BATCH_SERVER
+    ret_cod2=$?
+  fi
+  fi
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+}
+
+config_cream_gip_info_dynamic_setenv () { 
+
+    	yaimlog DEBUG "This function currently doesn't set any environment variables."
+}
+
+config_cream_gip_info_dynamic () {
+
+GLITE_CREAM_LOCATION_LIBEXEC=/usr/libexec
+GLITE_CREAM_LOCATION_GIP=/var/lib/bdii/gip
+
+LDIF_DIR="${GLITE_CREAM_LOCATION_GIP}/ldif"
+
+if [ "x${CREAM_CLUSTER_MODE}" = "xyes" ] && ( ! echo " ${NODE_TYPE_LIST} " | egrep -q 'CLUSTER' ); then
+  glueformat="glue1"
+else
+  glueformat="both"
+fi
+
+
+
+glue1celdif="/var/lib/bdii/gip/ldif/static-file-CE.ldif"
+glue2managerldif="/var/lib/bdii/gip/ldif/ComputingManager.ldif"
+glue2shareldif="/var/lib/bdii/gip/ldif/ComputingShare.ldif"
+
+
+BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+     my_batch_sys="pbs"
+elif [ $BATCH_SYS = lsf ]; then
+     my_batch_sys="lsf"
+else
+     my_batch_sys=${BATCH_SYS}
+fi
+
+
+
+case "$my_batch_sys" in
+
+    condor)
+      plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/glite-info-dynamic-condor ${BATCH_BIN_DIR:-/usr/bin}/ ${LDIF_DIR}/static-file-CE.ldif";;
+
+    lsf)
+      yaimlog DEBUG "Customizing the /etc/lrms/lsf.conf file ..."
+      conffile="/etc/lrms/lsf.conf"
+      sed -i "s|outputformat\s*=.*|outputformat=\"${glueformat}\"|" $conffile;
+      sed -i "s|glue1-static-file-CE\s*=.*|glue1-static-file-CE=\"${glue1celdif}\"|" $conffile;
+      sed -i "s|glue2-static-file-computing-manager\s*=.*|glue2-static-file-computing-manager=\"${glue2managerldif}\"|" $conffile;
+      sed -i "s|glue2-static-file-computing-share\s*=.*|glue2-static-file-computing-share=\"${glue2shareldif}\"|" $conffile;
+      sed -i "s|binPath\s*=.*|binPath=\"${BATCH_BIN_DIR}\"|" $conffile;
+      
+      plugin=". ${LSFPROFILE_DIR}/profile.lsf; ${GLITE_CREAM_LOCATION_LIBEXEC}/info-dynamic-lsf $conffile";;
+
+   pbs)
+      yaimlog DEBUG "Customizing the /etc/lrms/pbs.conf file ..."
+      conffile="/etc/lrms/pbs.conf"
+      sed -i "s|outputformat\s*=.*|outputformat=\"${glueformat}\"|" $conffile;
+      sed -i "s|glue1-static-file-CE\s*=.*|glue1-static-file-CE=\"${glue1celdif}\"|" $conffile;
+      sed -i "s|glue2-static-file-computing-manager\s*=.*|glue2-static-file-computing-manager=\"${glue2managerldif}\"|" $conffile;
+      sed -i "s|glue2-static-file-computing-share\s*=.*|glue2-static-file-computing-share=\"${glue2shareldif}\"|" $conffile;
+      sed -i "s|pbs-host\s*=.*|pbs-host=\"${BATCH_SERVER}\"|" $conffile;
+      plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/info-dynamic-pbs $conffile";;
+
+   *)
+     yaimlog DEBUG "config_cream_gip_info_dynamic not able to manage this batch system"
+esac
+                                                                                                                             
+yaimlog DEBUG "Configuring the dynamic plugin associated to the batch system ${CE_BATCH_SYS}"
+CREAM_CE_STATE2=`echo ${CREAM_CE_STATE} | tr '[:upper:]' '[:lower:]'`
+cat << EOF  > ${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-ce
+#!/bin/sh
+/usr/libexec/glite-ce-check-submission-state /etc/glite-ce-dbtool/creamdb_min_access.conf
+retcode=\$?
+if [ \$retcode = 1 ] || [ \$retcode = 2 ] ; then
+  # Submissions disabled. Publish Draining
+  $plugin | sed -e 's/GlueCEStateStatus: Production/GlueCEStateStatus: Draining/;s/GLUE2ComputingShareServingState: production/GLUE2ComputingShareServingState: draining/'
+else 
+  # Submissions enabled. Use CREAM_CE_STATE (Production by default)
+  $plugin | sed -e 's/GlueCEStateStatus: Production/GlueCEStateStatus: ${CREAM_CE_STATE}/;s/GLUE2ComputingShareServingState: production/GLUE2ComputingShareServingState: ${CREAM_CE_STATE2}/'
+fi
+EOF
+
+chmod +x ${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-ce
+
+return 0
+
+}

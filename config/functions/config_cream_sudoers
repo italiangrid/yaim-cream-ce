@@ -1,0 +1,236 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2009. 
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.  
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0 
+# 
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_sudoers
+#
+# DESCRIPTION : This function configures sudo functionality in a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+ 
+
+function config_cream_sudoers_check () {
+
+  requires $1  USERS_CONF CE_BATCH_SYS SUDO_CREAM_LOG_DESTINATION VOS
+  ret_cod1=$?
+  
+  if [ "x${SUDO_CREAM_LOG_DESTINATION}" == "xfile" ]; then
+    requires $1 SUDO_CREAM_LOG_FILE
+    ret_cod2=$?
+  fi
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+ 
+}
+
+function config_cream_sudoers_setenv () {
+
+  yaimlog DEBUG "This function currently doesn't set any environment variables."
+
+}
+
+function check_sudo_version() {
+
+# First	of all check if	sudo is	installed
+sudocmd=`which sudo`
+if  [ ! $? == 0 ]; then
+  yaimlog ERROR "sudo probably not installed !"
+  exit 1
+fi
+
+return 0
+
+}
+
+
+function create_sudoers_forcream () {
+
+SCRIPT="/etc/sudoers.forcream"
+
+  BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+  my_batch_sys="pbs"
+  yaimlog DEBUG "BATCH_SYS=$BATCH_SYS"
+
+  if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+     my_batch_sys="pbs"
+  elif [ $BATCH_SYS = lsf ]; then
+     my_batch_sys="lsf"
+  else
+     my_batch_sys=${BATCH_SYS}
+  fi
+
+ cat <<EOF > "${SCRIPT}"
+
+# sudoers file for cream.
+#
+# This file contains specific configuration for cream.
+
+# User alias specification (for cream)
+
+EOF
+
+present_groups=`mktemp /tmp/yaim.XXXXXX`
+all_groups=`mktemp /tmp/yaim.XXXXXX`
+
+# Detect all existing groups (present_groups) and supported groups (all_groups)
+getent group | cut -d':' -f1 | sort > $present_groups
+
+for vo in $VOS; do
+  awk -F : '{if($5=="'$vo'") print $4}' $USERS_CONF | cut -d ',' -f1 | sort | uniq >> ${all_groups}
+done
+
+group_count=0
+for a_group in `cat ${all_groups} | sort | uniq`; do
+
+  if [ "x`grep ${a_group} ${present_groups}`" != "x" ]; then
+
+    upper_group_name=`echo ${a_group} |tr '[:lower:]' '[:upper:]'`
+
+    #Fix bug #68225 ( \W Matches a non-alphanumeric character, excluding "_"; same as [^A-Za-z0-9_] )
+    filtered_upper_group_name=`echo $upper_group_name | sed -e "s/\W/_/g"`
+    upper_group_name=${filtered_upper_group_name}
+
+    cat <<EOF >> "${SCRIPT}"
+
+Runas_Alias GLEXEC_${upper_group_name} = \\
+EOF
+
+    users_list=`awk -F : '/'${a_group}'/ {split($4, vec, ","); if(vec[1]=="'${a_group}'") print $2}' $USERS_CONF`
+    users_array=""
+    let len=0
+    for user in $users_list; do
+      users_array[$len]="$user"
+      let len=$((len+1))
+    done
+
+    let count=$len/5
+    let mod=$((len%5))
+    if [ $count -eq 0 ]; then
+      out=""
+      for user in $users_list; do
+        out=" $out ${user},"
+      done
+      final_out=`echo $out | sed -e 's/,$//'`
+      echo "      $final_out" >> "${SCRIPT}"
+
+    else
+      if [ $mod -eq 0 ]; then
+        sup=$((len-5))
+      else
+        sup=$count
+      fi
+      for ((i=0; i<$sup; i=i+5)); do
+        echo "      ${users_array[$i]}, ${users_array[$((i+1))]}, ${users_array[$((i+2))]}, ${users_array[$((i+3))]}, ${users_array[$((i+4))]}, \\"  >> "${SCRIPT}"
+      done
+      out=""
+      for((j=i;j<len;j++)); do
+        out="$out ${users_array[$j]}, "
+      done
+      final_out=`echo $out | sed -e 's/,$//'`
+      echo "      $final_out"  >> "${SCRIPT}"
+    fi
+  fi
+
+let group_count++
+done
+
+    cat <<EOF >> "${SCRIPT}"
+
+
+Runas_Alias GLEXEC_ACCOUNTS = \\
+EOF
+
+let i=0
+a_group=""
+
+for a_group in `cat ${all_groups} | sort | uniq`; do
+
+  upper_group_name=`echo ${a_group} |tr '[:lower:]' '[:upper:]'`
+  #Fix bug #68225 ( \W Matches a non-alphanumeric character, excluding "_"; same as [^A-Za-z0-9_] )
+  filtered_upper_group_name=`echo $upper_group_name | sed -e "s/\W/_/g"`
+  upper_group_name=${filtered_upper_group_name}
+
+  if [ $i -lt $((group_count-1)) ]; then
+    echo "      GLEXEC_${upper_group_name}, \\" >>"${SCRIPT}"
+  else
+    echo "      GLEXEC_${upper_group_name}" >> "${SCRIPT}"
+  fi
+  let i++
+
+done
+ cat <<EOF >> "${SCRIPT}"
+
+# Cmnd alias specification (for cream)
+
+Cmnd_Alias GLEXEC_CMDS = /bin/echo, /bin/mkdir, /bin/cp, /bin/cat, /usr/bin/groups, /usr/bin/whoami, /bin/dd, /bin/mv, /usr/bin/id, /bin/kill, ${GLITE_CREAM_LOCATION_LIBEXEC}/${my_batch_sys}_submit.sh, ${GLITE_CREAM_LOCATION_LIBEXEC}/${my_batch_sys}_status.sh, ${GLITE_CREAM_LOCATION_LIBEXEC}/${my_batch_sys}_cancel.sh, ${GLITE_CREAM_LOCATION_LIBEXEC}/${my_batch_sys}_hold.sh, ${GLITE_CREAM_LOCATION_LIBEXEC}/${my_batch_sys}_resume.sh, ${GLITE_CREAM_LOCATION_BIN}/glite-cream-copyProxyToSandboxDir.sh, ${GLITE_CREAM_LOCATION_BIN}/glite-cream-createsandboxdir, ${GLITE_CREAM_LOCATION_BIN}/glite-ce-cream-purge-sandbox, ${GLITE_CREAM_LOCATION_BIN}/glite-ce-cream-purge-proxy,  ${GLITE_CREAM_LOCATION_BIN}/glite-ce-cream-create-wrapper, /bin/ls 
+
+
+# Defaults specification (for cream)
+EOF
+
+if [ "x${SUDO_CREAM_LOG_DESTINATION}" == "xfile" ]; then
+  if [ ! -f ${SUDO_CREAM_LOG_FILE} ]; then
+    yaimlog DEBUG "Creating sudo log file"
+    touch ${SUDO_CREAM_LOG_FILE}
+    #make sure it is not world-readable
+    chmod 640 ${SUDO_CREAM_LOG_FILE}
+  fi
+  echo "Defaults        logfile=${SUDO_CREAM_LOG_FILE}  # Added for cream" >> "${SCRIPT}"
+fi
+
+ cat <<EOF >> "${SCRIPT}"
+
+
+Defaults>GLEXEC_ACCOUNTS !requiretty # Added for cream
+Defaults>GLEXEC_ACCOUNTS env_keep += "BLAHPD_LOCATION BLAHPD_CONFIG_LOCATION"
+
+
+# User privilege specification (for cream)
+root    ALL=(ALL) ALL  # Added for cream
+tomcat  ALL=(GLEXEC_ACCOUNTS) NOPASSWD: GLEXEC_CMDS  # Added for cream
+
+EOF
+
+}
+
+
+function config_cream_sudoers () {
+
+  GLITE_CREAM_LOCATION_BIN=/usr/bin
+  GLITE_CREAM_LOCATION_LIBEXEC=/usr/libexec
+
+  create_sudoers_forcream
+
+  check_sudo_version
+  if [ $? = 0 ]; then
+    grep "#include /etc/sudoers.forcream" /etc/sudoers > /dev/null 2>&1
+    if [ ! $? = 0 ]; then
+      echo "#include /etc/sudoers.forcream" >> /etc/sudoers
+      yaimlog DEBUG "File /etc/sudoers changed to include /etc/sudoers.forcream"
+    fi
+  chmod 0440 /etc/sudoers.forcream
+  chmod 0440 /etc/sudoers
+  fi
+}
+

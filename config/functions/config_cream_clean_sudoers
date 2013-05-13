@@ -1,0 +1,123 @@
+
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2009. 
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.  
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0 
+# 
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_clean_sudoers
+#
+# DESCRIPTION : This function configures sudo functionality in a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#
+##############################################################################
+# 
+
+function config_cream_clean_sudoers_check () {
+
+  requires $1  USERS_CONF VOS
+  ret_cod1=$?
+  
+}
+
+function config_cream_clean_sudoers_setenv () {
+
+  yaimlog DEBUG "This function currently doesn't set any environment variables."
+
+}
+
+
+function clean_sudoers_file() {
+
+sudoers_orig="/etc/sudoers"
+sudoers_temp="/tmp/sudoers.temp"
+sudoers_cleaned="/tmp/sudoers.cleaned"
+
+cp ${sudoers_orig} ${sudoers_cleaned}
+
+present_groups=`mktemp /tmp/yaim.XXXXXX`
+all_groups=`mktemp /tmp/yaim.XXXXXX`
+
+# Detect all existing groups (present_groups) and supported groups (all_groups)
+getent group | cut -d':' -f1 | sort > $present_groups
+
+for vo in $VOS; do
+  awk -F : '{if($5=="'$vo'") print $4}' $USERS_CONF | cut -d ',' -f1 | sort | uniq >> ${all_groups}
+done
+
+echo "$present_groups"
+echo "${all_groups}"
+
+for a_group in `cat ${all_groups}`; do
+
+  if [ "x`grep ${a_group} ${present_groups}`" != "x" ]; then
+    users_list=`awk -F : '/'${a_group}'/ {split($4, vec, ","); if(vec[1]=="'${a_group}'") print $2}' $USERS_CONF`
+    echo $users_list > /root/userslist
+
+    for user in $users_list; do
+      cat ${sudoers_cleaned} | sed '/'"${user}"'/d'  > ${sudoers_temp}
+      mv ${sudoers_temp} ${sudoers_cleaned}
+    done
+  fi
+
+done
+
+cat ${sudoers_cleaned} | sed  -e '/Runas_Alias GLEXEC_/d' | sed -e '/Runas_Alias GLEXEC_ACCOUNTS/d' | sed -e '/Cmnd_Alias GLEXEC_CMDS/d' | sed -e '/GLEXEC_/d' | sed -e '/cream/d' > ${sudoers_temp}
+mv ${sudoers_temp} ${sudoers_cleaned}
+
+grep -v "Defaults        passwd_tries=0" ${sudoers_cleaned} > ${sudoers_temp}
+mv ${sudoers_temp} ${sudoers_cleaned}
+
+grep -v "root    ALL=(ALL) ALL" ${sudoers_cleaned} > ${sudoers_temp}
+mv ${sudoers_temp} ${sudoers_cleaned}
+
+grep -v "Defaults        logfile=" ${sudoers_cleaned} > ${sudoers_temp}
+mv ${sudoers_temp} ${sudoers_cleaned}
+
+grep -v "#include sudoers.forcream" ${sudoers_cleaned} > ${sudoers_temp}
+mv ${sudoers_temp} ${sudoers_cleaned}
+
+sed '/^$/d' ${sudoers_cleaned} > ${sudoers_temp}
+mv ${sudoers_temp} ${sudoers_cleaned}
+
+mv ${sudoers_cleaned} ${sudoers_orig}
+
+}
+
+
+function config_cream_clean_sudoers() {
+
+grep GLEXEC_ /etc/sudoers > /dev/null 2>&1 ;
+if [ ! $? = 0 ]; then
+  yaimlog INFO "/etc/sudoers file already clean. Probably installation from scratch"
+else
+  # Backup existing /etc/sudoers
+  SUDOERS_FILE="/etc/sudoers"
+  SUDOERS_BAK_FILE="${SUDOERS_FILE}.bak_`date +%Y%m%d_%H%M%S`"      # sudoers backup filename 
+  cp ${SUDOERS_FILE} ${SUDOERS_BAK_FILE}
+  yaimlog INFO "File ${SUDOERS_FILE} backed-up in ${SUDOERS_BAK_FILE}"
+  # Remove oldest backup file
+  yaimlog DEBUG "${FUNCTION}: Removing old backup files"
+  find `dirname "${SUDOERS_FILE}"` -ctime +2 -name '${SUDOERS_FILE}.bak*' -exec rm {} \;
+
+  clean_sudoers_file
+  yaimlog WARNING "File /etc/sudoers cleaned from configuration needed for cream glexec sudo"
+fi
+
+}
+

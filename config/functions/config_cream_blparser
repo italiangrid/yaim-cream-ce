@@ -1,0 +1,291 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004. 
+# See http://www.eu-egee.org/partners/ for details on the copyright 
+# holders.  
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+#
+#    http://www.apache.org/licenses/LICENSE-2.0 
+#
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS 
+# OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_cream_blparser
+#
+# DESCRIPTION : This function configures blparser in a Cream CE.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# NOTES :       * creates /opt/glite/etc/blparser.conf
+#               * creates /etc/logrotate.d/glite-<lrms>parser
+#               * starts glite-ce-blparser at init
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#                 
+##############################################################################
+
+function config_cream_blparser_check () {
+
+  requires $1 \
+     BLPARSER_WITH_UPDATER_NOTIFIER BLPARSER_CONFIG_LOCATION \
+     BLAHPD_LOCATION BLAHPD_CONFIG_LOCATION      
+
+  ret_cod1=$?
+  if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = false ]; then
+    requires $1 CE_BATCH_SYS BATCH_BIN_DIR BLP_PORT CREAM_PORT 
+    ret_cod2=$?
+    BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+    if [ "x$BATCH_SYS" = "xlsf" ]; then
+      requires $1 BATCH_CONF_DIR 
+      ret_cod3=$?
+    else if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+       requires $1 BATCH_LOG_DIR
+       ret_cod3=$?
+    fi
+    fi
+  fi
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]  || [ ! $ret_cod3 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+}
+
+function config_cream_blparser_setenv () {
+
+  yaimgridenv_set BLAHPD_LOCATION ${BLAHPD_LOCATION}
+  yaimgridenv_set BLAHPD_CONFIG_LOCATION ${BLAHPD_CONFIG_LOCATION}
+  yaimgridenv_set BLPARSER_CONFIG_LOCATION ${BLPARSER_CONFIG_LOCATION}
+  if [ "x${LSF_BASE_DIR}" != "x" ]; then
+     yaimgridenv_set LSF_BASE_DIR ${LSF_BASE_DIR}
+  fi
+}
+
+function config_cream_blparser() {
+
+
+  GLITE_CREAM_LOCATION_ETC=/etc
+  GLITE_CREAM_LOCATION_LOG=/var/log/cream
+
+  # Stop process if alive
+  ps ax | grep -v grep |grep blparser | grep -v config_cream_blparser > /dev/null 2>&1
+  if [ $? = 0 ]; then
+    yaimlog INFO "Stopping blparser"
+    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser stop
+  fi
+
+
+  if [ ${BLPARSER_WITH_UPDATER_NOTIFIER} = true ]; then
+    yaimlog INFO "BLPARSER_WITH_UPDATER_NOTIFIER=true. Blparser configuration is not required"
+    return 0
+  fi
+
+  # backup old configuration
+  if [ -f ${GLITE_CREAM_LOCATION_ETC}/blparser.conf ]; then
+    backup_file ${GLITE_CREAM_LOCATION_ETC}/blparser.conf
+  fi
+
+  # local variables definition
+  BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+  if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+    pbs_use_blp=yes
+    pbs_use_blpd=yes
+    pbs_blp_status=ENABLED
+    pbs_blp_debug=1
+    pbs_blp_log=${GLITE_CREAM_LOCATION_LOG}/glite-pbsparser.log
+    pbs_blp_spool=${BATCH_LOG_DIR}
+    pbs_blp_num=1
+    pbs_blp_port1=$BLP_PORT
+    pbs_blp_port2=
+    pbs_blp_cream_port1=$CREAM_PORT
+    pbs_blp_cream_port2=
+
+    lsf_use_blp=no
+    lsf_use_blpd=no
+    lsf_blp_status=DISABLED
+    lsf_blp_debug=
+    lsf_blp_log=
+    lsf_blp_bin=
+    lsf_blp_conf=
+    lsf_blp_num=
+    lsf_blp_port1=
+    lsf_blp_port2=
+    lsf_blp_cream_port1=
+    lsf_blp_cream_port2=
+
+  elif [ $BATCH_SYS = lsf ]; then
+    pbs_use_blp=no
+    pbs_use_blpd=no
+    pbs_blp_status=DISABLED
+    pbs_blp_debug=
+    pbs_blp_log=
+    pbs_blp_spool=
+    pbs_blp_num=
+    pbs_blp_port1=
+    pbs_blp_port2=
+    pbs_blp_cream_port1=
+    pbs_blp_cream_port2=
+
+    lsf_use_blp=yes
+    lsf_use_blpd=yes
+    lsf_blp_status=ENABLED
+    lsf_blp_debug=1
+    lsf_blp_log=${GLITE_CREAM_LOCATION_LOG}/glite-lsfparser.log
+    lsf_blp_bin=${BATCH_BIN_DIR}
+    lsf_blp_conf=${BATCH_CONF_DIR}
+    lsf_blp_num=1
+    lsf_blp_port1=$BLP_PORT
+    lsf_blp_port2=
+    lsf_blp_cream_port1=$CREAM_PORT
+    lsf_blp_cream_port2=
+  fi
+
+  # edit configuration files
+  SCRIPT=${GLITE_CREAM_LOCATION_ETC}/blparser.conf
+  #----------------------------------------------------------
+  # blparser.conf - BEGIN
+  #----------------------------------------------------------
+  cat << EOF > $SCRIPT
+# WARNING: THIS FILE IS WRITTEN BY ig-yaim! (function $FUNCTION)
+#
+
+#
+# PBS part (${pbs_blp_status})
+#
+ 
+# Set to yes to start the PBS parser
+GLITE_CE_USE_BLPARSERPBS=$pbs_use_blp
+ 
+# Set to yes to run the PBS parser in daemon mode
+GLITE_CE_BLPARSERPBS_DAEMON=$pbs_use_blpd
+ 
+# Set to 1 for normal debug or 2 for more debug
+GLITE_CE_BLPARSERPBS_DEBUGLEVEL=$pbs_blp_debug
+ 
+# Log file where the debug information are written
+GLITE_CE_BLPARSERPBS_DEBUGLOGFILE=$pbs_blp_log
+ 
+# PBS spooldir
+GLITE_CE_BLPARSERPBS_SPOOLDIR=$pbs_blp_spool
+ 
+# Use this to start multiple PBS parser on different ports
+# if it is not set defaults to 1
+GLITE_CE_BLPARSERPBS_NUM=$pbs_blp_num
+ 
+# PBS parser listening port
+GLITE_CE_BLPARSERPBS_PORT1=$pbs_blp_port1
+GLITE_CE_BLPARSERPBS_PORT2=$pbs_blp_port2
+ 
+# PBS parser listening cream port
+GLITE_CE_BLPARSERPBS_CREAMPORT1=$pbs_blp_cream_port1
+GLITE_CE_BLPARSERPBS_CREAMPORT2=$pbs_blp_cream_port2
+
+
+#
+# LSF part (${lsf_blp_status})
+#
+ 
+# Set to yes to start the LSF parser
+GLITE_CE_USE_BLPARSERLSF=$lsf_use_blp
+ 
+# Set to yes to run the LSF parser in daemon mode
+GLITE_CE_BLPARSERLSF_DAEMON=$lsf_use_blpd
+ 
+# Set to 1 for normal debug or 2 for more debug
+GLITE_CE_BLPARSERLSF_DEBUGLEVEL=$lsf_blp_debug
+ 
+# Log file where the debug information are written
+GLITE_CE_BLPARSERLSF_DEBUGLOGFILE=$lsf_blp_log
+
+# LSF binpath
+GLITE_CE_BLPARSERLSF_BINPATH=$lsf_blp_bin
+ 
+# LSF conf path (to find lsf.conf file)
+GLITE_CE_BLPARSERLSF_CONFPATH=$lsf_blp_conf
+ 
+# Use this to start multiple LSF parser on different ports
+# if it is not set defaults to 1
+GLITE_CE_BLPARSERLSF_NUM=$lsf_blp_num
+
+# LSF parser listening port
+GLITE_CE_BLPARSERLSF_PORT1=$lsf_blp_port1
+GLITE_CE_BLPARSERLSF_PORT2=$lsf_blp_port2
+
+# LSF parser listening cream port
+GLITE_CE_BLPARSERLSF_CREAMPORT1=$lsf_blp_cream_port1
+GLITE_CE_BLPARSERLSF_CREAMPORT2=$lsf_blp_cream_port2
+EOF
+  #----------------------------------------------------------
+  # blparser.conf - END
+  #----------------------------------------------------------
+
+  # Start service 
+  
+  ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser start
+ 
+  # Start service at init
+
+  if [ ${BLPARSER_HOST} != ${CE_HOST} ]; then
+    grep glite-ce-blah-parser ${GLITE_CREAM_LOCATION_ETC}/gLiteservices > /dev/null
+      if [ ! $? = 0 ] ; then
+      echo "${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser" >> ${GLITE_CREAM_LOCATION_ETC}/gLiteservices
+    fi
+  fi
+
+  # Configure log rotation
+  if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ]; then
+
+    SCRIPT=/etc/logrotate.d/glite-pbsparser
+    #----------------------------------------------------------
+    # /etc/logrotate.d/glite-pbsparser - BEGIN
+    #----------------------------------------------------------
+    cat << EOF > $SCRIPT
+${GLITE_CREAM_LOCATION_LOG}/glite-pbsparser.log {
+        copytruncate
+        rotate 50
+        size = 10M
+        missingok
+        nomail
+}
+EOF
+    #----------------------------------------------------------
+    # /etc/logrotate.d/glite-pbsparser - END
+    #----------------------------------------------------------
+
+  elif [ $BATCH_SYS = lsf ]; then
+
+    SCRIPT=/etc/logrotate.d/glite-lsfparser
+    #----------------------------------------------------------
+    # /etc/logrotate.d/glite-lsfparser - BEGIN
+    #----------------------------------------------------------
+    cat << EOF > $SCRIPT
+${GLITE_CREAM_LOCATION_LOG}/glite-lsfparser.log {
+        copytruncate
+        rotate 50
+        size = 10M
+        missingok
+        nomail
+}
+EOF
+    #----------------------------------------------------------
+    # /etc/logrotate.d/glite-lsfparser - END
+    #----------------------------------------------------------
+
+  fi
+
+  # Set hourly cron for logrotate
+  if [[ ! -f /etc/cron.hourly/logrotate ]]; then
+    mv -f `find /etc -name logrotate` /etc/cron.hourly/
+  fi
+
+  return 0
+
+}

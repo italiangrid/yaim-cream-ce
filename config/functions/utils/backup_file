@@ -1,0 +1,21 @@
+# This function has 1 input parameters:
+# #1 file to back up name
+ 
+function backup_file () {
+
+  FILE_TO_BACKUP=$1
+
+  # Backup existing ${FILE_TO_BACK_UP}
+  if [ -f ${FILE_TO_BACKUP} ]; then
+    BAK_FILE="${FILE_TO_BACKUP}.bak_`date +%Y%m%d_%H%M%S`"      # backup filename 
+    cp ${FILE_TO_BACKUP} ${BAK_FILE}
+    yaimlog INFO "File ${FILE_TO_BACKUP} backed-up in ${BAK_FILE}"
+    # Remove oldest backup file
+    yaimlog DEBUG "${FUNCTION}: Removing old backup files"
+    find `dirname "${FILE_TO_BACKUP}"` -ctime +2 -name '${FILE_TO_BACKUP}.bak*' -exec rm {} \;
+  else
+    yaimlog WARNING "File $FILE_TO_BACKUP not present. No need to backup it"
+  fi
+}
+
+

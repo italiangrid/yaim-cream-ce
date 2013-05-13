@@ -1,0 +1,661 @@
+#!/bin/bash
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders. 
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :   	config_cream_gip_glue2
+#        
+# DESCRIPTION : This function configures the generic information providor (GIP)
+#               for a Cream CE node.
+#
+# AUTHORS :     grid-release@infn.it
+#
+# YAIM MODULE:  glite.yaim.cream-ce
+#                
+############################################################################## 
+
+function config_cream_gip_glue2_check () {
+
+  requires $1 SITE_NAME CE_HOST CREAM_CE_STATE CE_BATCH_SYS BATCH_VERSION \
+              CE_OTHERDESCR VOS QUEUES __GROUP_ENABLE USE_CEMON CE_CAPABILITY
+  ret_cod1=$?
+  if [ "x${CREAM_CLUSTER_MODE}" == "xyes" ]; then
+    requires $1 COMPUTING_SERVICE_ID
+    ret_cod2=$?
+  else
+    requires $1 CE_PHYSCPU CE_LOGCPU CE_SMPSIZE \
+                CE_CPU_VENDOR CE_CPU_MODEL CE_CPU_SPEED \
+                CE_MINPHYSMEM CE_MINVIRTMEM \
+                CE_OS_ARCH CE_OS_FAMILY CE_OS CE_OS_RELEASE \
+                CE_INBOUNDIP CE_OUTBOUNDIP \
+                CE_SF00 CE_SI00 
+    ret_cod2=$?
+  fi
+  
+  if  [ ! $ret_cod1 == 0 ] || [ ! $ret_cod2 == 0 ]; then
+    return 1
+  else
+    return 0
+  fi
+
+
+}
+
+function config_cream_gip_glue2_setenv () { 
+
+  yaimlog DEBUG "This function currently doesn't set any environment variables."
+
+}
+
+function config_cream_gip_glue2 () {
+
+
+GLITE_CREAM_LOCATION_ETC=/etc
+GLITE_CREAM_LOCATION_GIP=/var/lib/bdii/gip
+GLITE_CREAM_LOCATION_BIN=/usr/bin
+GLITE_CREAM_LOCATION_LIBEXEC=/usr/libexec
+
+
+cat << EOF > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2-shares.conf
+# Information about shares
+# For each one define the queue name, the ACBRs, the owners, the connected endpoints 
+# and execution environments 
+
+EOF
+
+# ServiceId is yaim variable COMPUTING_SERVICE_ID if defined (mandatory in cluster mode)
+# Otherwise it is hostname + "_ComputingElement"
+if [ "x${COMPUTING_SERVICE_ID}" != "x" ]; then
+  CreamServiceId=${COMPUTING_SERVICE_ID}
+else
+  CreamServiceId=${CE_HOST}_ComputingElement
+fi
+
+# Check if the CE is using ARGUS (to be published among the otherinfo of
+# the endpoint objectclass
+if [ "x$USE_ARGUS" = "xyes" ]; then
+  UseArgus="yes"
+else
+  UseArgus="no"
+fi
+
+# Check if the CE provides the ES interface
+# this triggers the publication of new Endpoints
+if [ "x$USE_EMIES" = "xtrue" ]; then
+  UseEMIES="yes"
+else
+  UseEMIES="no"
+fi
+
+
+. /etc/glite-ce-cream/service.properties
+if [ x = x${interface_version} ]; then
+    yaimlog ERROR "serviceInterfaceVersion not found !"
+    return 1
+fi
+
+if [ x = x${implementation_version} ]; then
+    yaimlog ERROR "serviceVersion not found !"
+    return 1
+fi
+
+###################################################################################################
+#
+# Calculate shares
+# One share is a VOView
+# For further details see:
+# EGI profile for GLUE2
+# https://documents.egi.eu/document/1324
+#
+###################################################################################################
+
+BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
+if [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] ; then
+    my_batch_sys="pbs"
+else
+    my_batch_sys=${BATCH_SYS}
+fi
+
+share_list="( "
+shareSep=""
+
+# associative arrays are missing in SL5
+# used indexed arrays instead
+declare -a voset
+declare -a votable
+
+#
+# TODO get list of queues using the variables CE_HOST_<host-name>_QUEUES instead of relying on QUEUES
+#
+for QUEUE in $QUEUES; do
+
+    # Converting the dots and dashes to underscore to get the proper variable name
+    dnssafevar=`echo $QUEUE | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+    requires $1 ${dnssafevar}_GROUP_ENABLE
+    qenablevar=${dnssafevar}_GROUP_ENABLE
+
+    if [ -z "${!qenablevar}" ] ; then continue; fi
+
+    unset voset
+    unset votable
+    
+    for vomsgroup in ${!qenablevar}; do
+    
+        convert_fqan "${vomsgroup}"
+        if [ "x${FQANVOVIEWS}" = "xyes" ] ; then
+            curr_vogrp=${newfqan}
+        else
+            curr_vogrp=${newfqanvo}
+        fi
+        isa_fqan=`echo ${newfqan} | grep "/"`
+        
+        # we use a numeric id for a vo or a fqan
+        curr_idx=${#voset[*]}
+        for((idx=0; idx<${#voset[*]}; idx++)) ; do
+            if [ "x${voset[$idx]}" == "x${curr_vogrp}" ] ; then curr_idx=$idx; fi
+        done
+        voset[${curr_idx}]="${curr_vogrp}"
+        
+        if [ ! "${isa_fqan}" ] ; then
+            yaimlog DEBUG "Registered ACBR VO:${newfqan} for ${curr_vogrp}"
+            votable[${curr_idx}]="${votable[${curr_idx}]} VO:${newfqan}"
+        else
+            yaimlog DEBUG "Registered ACBR VOMS:${newfqan} for ${curr_vogrp}"
+            votable[${curr_idx}]="${votable[${curr_idx}]} VOMS:${newfqan}"
+        fi
+        
+    done
+    
+    for((idx=0; idx<${#voset[*]}; idx++)) ; do
+        voname=${voset[$idx]}
+        
+        share_acbr_list="( "
+        tmpSep=""
+        for acbrItem in ${votable[${idx}]} ; do
+            share_acbr_list="${share_acbr_list}${tmpSep}${acbrItem}"
+            tmpSep=" , "
+        done
+        share_acbr_list="${share_acbr_list} )"
+            
+        # Share name is queue name + name of voview
+        myview=`echo ${voname} | sed -e 's/=/_/g'`
+        share=`echo ${QUEUE}_${myview} | sed -e 's/\//_/g'`
+            
+        cat << EOF >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2-shares.conf
+SHARE_${share}_QUEUENAME=${QUEUE} 
+SHARE_${share}_OWNER=${voname}
+SHARE_${share}_ENDPOINTS=(${CE_HOST}_org.glite.ce.CREAM)
+SHARE_${share}_EXECUTIONENVIRONMENTS=(${CE_HOST})
+SHARE_${share}_ACBRS=${share_acbr_list}
+SHARE_${share}_CEIDS=(${CE_HOST}:8443/cream-${my_batch_sys}-${QUEUE})
+
+EOF
+            
+        share_list="${share_list}${shareSep}${share}"
+        shareSep=" , "
+            
+    done
+    
+done
+
+share_list="$share_list )"
+
+###################################################################################################
+#
+# Calculate acbr_list and owner as in glue1 
+#
+###################################################################################################
+my_owner=""
+my_acbr=""
+for vo in $VOS; do
+  my_owner="${my_owner} ${vo}"
+  my_acbr="${my_acbr} VO:${vo}"
+done
+
+# Calculate number of endpointtype
+if [ ${USE_CEMON} = true ]; then
+  NrEndPointType=3
+else
+  NrEndPointType=2 
+fi
+
+# Check format for CE_OTHERDESCR
+# See https://wiki.egi.eu/wiki/HEP_SPEC06#Q6:_How_are_HEP_SPEC_06_results_set_in_YAIM.3F
+OTHERDESCR_FMT='Cores=<CE_LOGCPU/CE_PHYSICALCPU> [, Benchmark=<value>-HEP-SPEC06]'
+  
+CORESTR=`echo ${CE_OTHERDESCR} | awk -F ',' '{print $1}'`
+BENCHSTR=`echo ${CE_OTHERDESCR} | awk -F ',' '{print $2}'`
+  
+TMPMATCH=`echo ${CORESTR} | grep -Eo 'Cores=[0-9]+\.?[0-9]*'`
+if [ "X${TMPMATCH}" == "X" ] ; then
+  yaimlog ERROR "CE_OTHERDESCR not properly set; format is ${OTHERDESCR_FMT}"
+  exit 1
+fi
+  
+if [ ! "X${BENCHSTR}" == "X" ] ; then
+  TMPMATCH=`echo ${BENCHSTR} | grep -Eo 'Benchmark=[0-9]+\.?[0-9]*-HEP-SPEC06'`
+  if [ "X${TMPMATCH}" == "X" ] ; then
+    yaimlog ERROR "CE_OTHERDESCR not properly set; format is ${OTHERDESCR_FMT}"
+    exit 1
+  fi
+fi
+
+# Calculate Benchmark
+benchmark_info=""
+if [ x = x${CE_SF00} ]; then
+  spec_fp=""
+else
+  spec_fp="(specfp2000 ${CE_SF00})"
+  benchmark_info="${spec_fp},"
+fi
+
+if [ x = x${CE_SI00} ]; then
+  spec_int=""
+else
+  spec_int="(specint2000 ${CE_SI00})"
+  benchmark_info="${benchmark_info} ${spec_int},"
+fi
+if [ "`echo $CE_OTHERDESCR | grep Benchmark`" > /dev/null ]; then
+  benchmark=`echo $CE_OTHERDESCR | sed -e 's/.*Benchmark=//' | sed -e 's/-.*//'`
+  hep_spec="(hep-spec06 $benchmark)"
+  benchmark_info="${benchmark_info} ${hep_spec}"
+else
+  hep_spec=""
+fi
+if [ ! "X" = "X${benchmark_info}" ]; then
+  benchmark_info=`echo ${benchmark_info} | sed -e 's/,$//g'`
+  benchmark_info="(${benchmark_info})"
+fi
+
+# Evaluate Cores number
+if [ "`echo $CE_OTHERDESCR | grep Cores`" > /dev/null ]; then
+  cores=`echo $CE_OTHERDESCR | sed -e 's/.*Cores=//g' | sed 's/,.*//g'`
+else
+  yaimlog ERROR "CE_OTHERDESCR not properly set"
+  exit ${YEX_CONFIG}
+fi
+
+# Evaluate closeSE info
+#echo "SE_LIST=${SE_LIST}"
+close_se_list=""
+if [ ! "X" = "X${SE_LIST}" ]; then
+
+  if [ $SE_MOUNT_INFO_LIST = "none" ]; then
+
+    for se in ${SE_LIST}; do 
+      close_se_list="${close_se_list} (${se} none none),"
+    done
+
+  else if [ ! "x" = "x${SE_MOUNT_INFO_LIST}" ]; then
+
+    for se_info in ${SE_MOUNT_INFO_LIST}; do 
+      se_i=`echo ${se_info} | sed -e 's/:.*//g'`
+      export_dir_i=`echo ${se_info} | sed -e 's/.*://g' |sed -e 's/,.*//g'`
+      mount_dir_i=`echo ${se_info} | sed -e 's/.*,//g'`
+      close_se_list="${close_se_list} (${se_i} ${export_dir_i} ${mount_dir_i}),"
+    done    
+  fi
+  fi
+
+  close_se_list=`echo $close_se_list | sed -e "s/,$//g"`
+  close_se_list="(${close_se_list})"
+
+fi
+
+# Evaluate CE_CAPABILITY info
+#echo "CE_CAPABILITY=${CE_CAPABILITY}"
+capa_list=""
+if [ ! "X" == "X${CE_CAPABILITY}" ]; then
+  capa_list_div=""
+  for capa_item in ${CE_CAPABILITY}; do
+    capa_list="${capa_list}${capa_list_div}${capa_item}"
+    capa_list_div=","
+  done
+  capa_list="(${capa_list})"
+fi
+
+# Back-up and create configuration file
+  backup_file ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+
+
+cat << EOF > ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+
+# Site Id
+SiteId = ${SITE_NAME}
+#
+#
+# Computing Service Id
+# Provided by yaim variable COMPUTING_SERVICE_ID (required if we are in cluster mode)
+# Otherwise Computing Service Id is hostname + the "_ComputingElement" string
+ComputingServiceId = ${CreamServiceId}
+#
+#
+# NumberOfEndPointType
+# 2 (CREAM-CE + RTEpublisher) if CEMon is deployed
+# 3 otherwise 
+NumberOfEndPointType = ${NrEndPointType}
+#
+#
+# ImplementationVersion is the version of the CREAM service
+ImplementationVersion=${implementation_version}
+#
+#
+# InterfaceVersion is the version of the Service interface
+InterfaceVersion=${interface_version}
+#
+#
+# HealthStateHelper should be the full pathname of the /glite-info-service-test plus CREAM as argument
+HealthStateHelper = ${GLITE_CREAM_LOCATION_BIN}/glite-info-service-test CREAM
+#
+#
+# ServingState of the Computing Element. It should be usually set to production
+ServingState = ${CREAM_CE_STATE}
+#
+#
+# Owner should be the list of owner VO names
+Owner = ${my_owner}
+#
+#
+# Argus is yes if this CREAM CE is using Argus as authorization mechanism
+Argus = ${UseArgus}
+#
+#
+# EMIES is yes if the CREAM CE provides the ES interface
+EMIES = ${UseEMIES}
+#
+# 
+#ACBR should be the list of AccessControlBaseRule strings to indicate who is allowed to 
+# have access to the service - at the simplest this is the same as the
+# Owner but with the VO names prefixed by "VO:"
+ACBR = ${my_acbr}
+#
+#
+# Shares. The list of shares.
+# Format: Shares = (share1, share2, ..., sharen)
+Shares = ${share_list}
+#
+#
+# ExecutionEnvironments
+# The list of the ids of the Execution Environments
+# Format: ExecutionEnvironments = (EE1, EE2, ..., EEn)
+ExecutionEnvironments = (${CE_HOST})
+#
+#
+# CE_BATH_SYS is the batch system used by the CE. E.g. torque, lsf, etc
+# It should be filled with the content of yaim variable CE_BATCH_SYS
+CE_BATCH_SYS = ${CE_BATCH_SYS}
+#
+#
+# BATCH_VERSION is the Version of the batch system
+# It should be filled with the content of yaim variable BATCH_VERSION
+BATCH_VERSION = ${BATCH_VERSION}
+#
+#
+# CloseSEs is the list of the storage services close to this computing service
+# Format: CloseSEs = (closeSE1, closeSE2, ..., closeSEn)
+# Format of closeSEi: (StorageServiceid LocalPath RemotePath)
+#CloseSEs = ${SE_LIST}
+CloseSEs = ${close_se_list}
+#
+#
+# CE_CAPABILITY is the list of CE capabilities
+# Format: CECapabilities = (capa1, capa2, ..., capaN)
+CECapabilities = ${capa_list}
+
+EOF
+
+
+
+if [ "x${CREAM_CLUSTER_MODE}" != "xyes" ]; then
+  cat << EOF >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+#
+#
+#
+# ArchitecturePlatformType is the Platform Type of the WNs of the 
+# specified EE
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_OS_ARCH
+ExecutionEnvironment_${CE_HOST}_ArchitecturePlatformType = ${CE_OS_ARCH}
+#
+# 
+# PhysicalCPUs is the total number of real CPUs/physical chips, including 
+# the nodes that are temporary down or offline 
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_PHYSCPU
+ExecutionEnvironment_${CE_HOST}_PhysicalCPUs = ${CE_PHYSCPU}
+#
+#
+# LogicalCPUs is the total number of cores/hyperthreaded CPUs, including the 
+# nodes that are temporary down or offline
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_LOGCPU
+ExecutionEnvironment_${CE_HOST}_LogicalCPUs = ${CE_LOGCPU}
+#
+#
+# SmpSize is the number of Logical CPUs (cores) of the WN
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_SMPSIZE 
+ExecutionEnvironment_${CE_HOST}_SmpSize = ${CE_SMPSIZE}
+#
+# 
+# ProcessorVendor is the name of the processor vendor for the Worker Nodes
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_CPU_VENDOR
+ExecutionEnvironment_${CE_HOST}_ProcessorVendor = ${CE_CPU_VENDOR}
+#
+#
+# ProcessorModel is the name of the processor model as defined by the vendor 
+# for the Worker Nodes
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_CPU_MODEL
+ExecutionEnvironment_${CE_HOST}_ProcessorModel = ${CE_CPU_MODEL}
+#
+#
+# ProcessorClockSpeed is the processor clock speed expressed in MHz for the 
+# Worker Nodes 
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_CPU_SPEED
+ExecutionEnvironment_${CE_HOST}_ProcessorClockSpeed = ${CE_CPU_SPEED}
+#
+#
+# MainMemoryRAMSize is the total physical memory of a WN expressed in MegaBytes
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_MINPHYSMEM 
+ExecutionEnvironment_${CE_HOST}_MainMemoryRAMSize = ${CE_MINPHYSMEM}
+#
+#
+# MainMemoryVirtualSize is the total virtual memory of a WN expressed in 
+# MegaBytes.
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_MINVIRTMEM
+ExecutionEnvironment_${CE_HOST}_MainMemoryVirtualSize = ${CE_MINVIRTMEM}
+#
+# 
+# OperatingSystemFamily should be filled with the OS family (e.g. linux)
+# It must be set for all the Execution Environments
+ExecutionEnvironment_${CE_HOST}_OperatingSystemFamily = ${CE_OS_FAMILY}
+#
+# 
+# OperatingSystemName is the name of the operating system used on the Worker 
+# Nodes 
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_OS
+ExecutionEnvironment_${CE_HOST}_OperatingSystemName = ${CE_OS}
+#
+# 
+# OperatingSystemRelease is the release of the operating system used on the 
+# Worker Nodes
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_OS_RELEASE
+ExecutionEnvironment_${CE_HOST}_OperatingSystemRelease = ${CE_OS_RELEASE}
+# 
+#
+# NetworkAdapterInboundIP must be set to either FALSE or TRUE to express the 
+# permission for inbound connectivity for the WNs
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_INBOUNDIP
+ExecutionEnvironment_${CE_HOST}_NetworkAdapterInboundIP = ${CE_INBOUNDIP}
+#
+#
+# NetworkAdapterOutboundIP must be set to either FALSE or TRUE to express 
+# the permission for outbound connectivity for the WNs
+# It must be set for all the Execution Environments
+# It should be filled with the content of yaim variable CE_OUTBOUNDIP
+ExecutionEnvironment_${CE_HOST}_NetworkAdapterOutboundIP = ${CE_OUTBOUNDIP}
+#
+#
+# Benchmarks is the list of benchmarks
+# Format: Benchmarks = (Benchmark1, Benchmark2, .., Benchmarkn)
+# Format of Benchmarki: (Type Value)
+ExecutionEnvironment_${CE_HOST}_Benchmarks = ${benchmark_info}
+#
+#
+# Cores is the number of cores per CPU of the Worker Nodes
+# It must be set for all the Execution Environments
+ExecutionEnvironment_${CE_HOST}_Cores = ${cores}
+
+EOF
+fi
+
+
+
+# DEBUG "Working area attributes (which are optional)
+
+if [ "x${ES_COMPUTING_SERVICE_ID}" != "x" ]; then
+  cat << EOF >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+#
+#
+# Computing service ID for Execution Service
+ESComputingServiceId = ${ES_COMPUTING_SERVICE_ID}
+
+EOF
+fi
+
+if [ "x${WORKING_AREA_SHARED}" != "x" ]; then
+echo "WorkingAreaShared = ${WORKING_AREA_SHARED}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_GUARANTEED}" != "x" ]; then
+echo "WorkingAreaGuaranteed = ${WORKING_AREA_GUARANTEED}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_TOTAL}" != "x" ]; then
+echo "WorkingAreaTotal = ${WORKING_AREA_TOTAL}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_FREE}" != "x" ]; then
+echo "WorkingAreaFree = ${WORKING_AREA_FREE}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_LIFETIME}" != "x" ]; then
+echo "WorkingAreaLifeTime = ${WORKING_AREA_LIFETIME}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_MULTISLOT_TOTAL}" != "x" ]; then
+echo "WorkingAreaMultiSlotTotal = ${WORKING_AREA_MULTISLOT_TOTAL}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_MULTISLOT_FREE}" != "x" ]; then
+echo "WorkingAreaMultiSlotFree = ${WORKING_AREA_MULTISLOT_FREE}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+if [ "x${WORKING_AREA_MULTISLOT_LIFETIME}" != "x" ]; then
+echo "WorkingAreaMultiSlotLifeTime = ${WORKING_AREA_MULTISLOT_LIFETIME}" >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+
+
+
+# Merge share conf file with the generic glue2 one
+if [ "x${CREAM_CLUSTER_MODE}" != "xyes" ]; then
+    cat ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2-shares.conf >> ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf
+fi
+rm ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2-shares.conf
+
+# ComputingService, ComputingManager, ComputingShare, ExecutionEnvironment , Benchmark, ToStorageService
+# should be published in the CREAM CE only when we are in no cluster mode
+# If we are in cluster mode and the CREAM CE is not also the glite-CLUSTER
+# node, we should remove the static files for ComputingService, ComputingManager, ComputingShare,
+# ExecutionEnvironment, Benchmark, ToStorageService
+
+if  [ "x${CREAM_CLUSTER_MODE}" == "xyes" ] && ( ! echo " ${NODE_TYPE_LIST} " | egrep -q 'CLUSTER' ); then 
+  yaimlog DEBUG "Removing the static files for ComputingService, ComputingManager, ComputingShare, ExecutionEnvironment, Benchmark, ToStorageService"
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingManager.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingShare.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ExecutionEnvironment.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/Benchmark.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ToStorageService.ldif
+fi
+
+
+# If we are in no cluster mode, enable the publication of ComputingService, ComputingManager, 
+# ComputingShare, ExecutionEnvironment, Benchmark, ToStorageService
+
+if [ "x${CREAM_CLUSTER_MODE}" != "xyes" ]; then
+
+  yaimlog DEBUG "Enable publication of ComputingService"
+  ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-computingservice-static \
+  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingService.ldif
+
+  yaimlog DEBUG "Enable publication of ComputingManager"
+  ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-manager-static \
+  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingManager.ldif
+
+   yaimlog DEBUG "Enable publication of ComputingShare"
+   ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-share-static \
+   ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingShare.ldif
+
+  yaimlog DEBUG "Enable publication of ExecutionEnvironment"
+  ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-executionenvironment-static \
+  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ExecutionEnvironment.ldif
+
+  yaimlog DEBUG "Enable publication of Benchmark"
+  ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-benchmark-static \
+  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/Benchmark.ldif
+
+  yaimlog DEBUG "Enable publication of ToStorageService"
+  ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-tostorageservice-static \
+  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ToStorageService.ldif
+
+fi
+
+
+if  [ "x${CREAM_CLUSTER_MODE}" == "xyes" ] && (! echo " ${NODE_TYPE_LIST} " | egrep -q 'CLUSTER' ); then 
+  yaimlog DEBUG "Enable publication of ComputingService, just because otherwise the ComputingEndpoint is not published"
+  ${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-computingservice-static \
+  ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingService.ldif
+fi
+
+
+# In all cases, enable the publication of ComputingEndPoint
+
+yaimlog DEBUG "Enable publication of ComputingEndPoint"
+${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-endpoint-static \
+${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf > ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingEndpoint.ldif
+
+
+# Installs plugins
+cat << EOF > ${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-cream-glue2
+#!/bin/sh
+${GLITE_CREAM_LOCATION_LIBEXEC}/glite-ce-glue2-endpoint-dynamic ${GLITE_CREAM_LOCATION_ETC}/glite-ce-glue2/glite-ce-glue2.conf ${GLITE_CREAM_LOCATION_ETC}/glite-ce-dbtool/creamdb_min_access.conf
+EOF
+
+chmod +x ${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-cream-glue2
+
+
+  # Exit with success
+  return 0
+}

@@ -1,0 +1,75 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders. 
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :   	config_cream_remove_subcluster_ce
+#        
+# DESCRIPTION : This function removes legacy files from the CE node which
+#               describe subclusters: The subclusters are now published by the
+#               CLUSTER node.
+#               This was copied from config_remove_subcluster_ce from 
+#               yaim-lcg-ce
+#
+# AUTHORS :     David.Smith@cern.ch, massimo.sgaravatto@pd.infn.it
+#
+# NOTES :       None
+#
+# YAIM MODULE:  glite-cream-ce
+#                
+############################################################################## 
+
+config_cream_remove_subcluster_ce_check () {
+  return 0;
+}
+
+
+config_cream_remove_subcluster_ce_setenv () { 
+
+    	yaimlog DEBUG "This function currently doesn't set any environment variables."
+}
+
+
+config_cream_remove_subcluster_ce () {
+
+
+  GLITE_CREAM_LOCATION_GIP=/var/lib/bdii/gip
+
+  if [ "x${CREAM_CLUSTER_MODE}" != "xyes" ]; then
+    return 0
+  fi
+
+  if ( echo "${NODE_TYPE_LIST}" | grep -q 'CLUSTER' ); then
+    return 0
+  fi
+
+  if [ "x$CLUSTER_HOST" = "x`hostname -f`" ]; then
+    return 0
+  fi
+  yaimlog DEBUG "Removing cluster specific files from gip/ldif directory"
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/static-file-Cluster.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingService.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingManager.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ComputingShare.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ExecutionEnvironment.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/Benchmark.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/ldif/ToStorageService.ldif
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-software-wrapper
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/provider/glite-info-glue2-applicationenvironment-wrapper
+  rm -f ${GLITE_CREAM_LOCATION_GIP}/provider/glite-info-provider-service-rtepublisher-wrapper
+
+  return 0
+}

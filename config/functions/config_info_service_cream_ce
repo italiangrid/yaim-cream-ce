@@ -1,0 +1,142 @@
+##############################################################################
+# Copyright (c) Members of the EGEE Collaboration. 2004.
+# See http://www.eu-egee.org/partners/ for details on the copyright
+# holders.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+#
+# NAME :        config_info_service_cream_ce
+#
+# DESCRIPTION : This function configures the dynamic service publisher
+#                        for the node type cream-ce.
+#
+# AUTHORS :     your mail
+#
+# NOTES :
+#
+# YAIM MODULE:  glite-yaim-cream-ce
+#
+##############################################################################
+
+config_info_service_cream_ce_check () {
+        requires $1 SITE_NAME CE_HOST 
+}
+
+config_info_service_cream_ce_setenv () {
+        yaimlog DEBUG "This function currently doesn't set any environment variables."
+}
+
+config_info_service_cream_ce () {
+
+
+GLITE_CREAM_LOCATION_BIN=/usr/bin
+GLITE_CREAM_LOCATION_ETC=/etc
+GLITE_CREAM_LOCATION_GIP=/var/lib/bdii/gip
+
+INFO_SERVICE_CONFIG=${INFO_SERVICE_CONFIG:-${GLITE_CREAM_LOCATION_ETC}/glite/info/service}
+INFO_SERVICE_SCRIPT=${INFO_SERVICE_SCRIPT:-${GLITE_CREAM_LOCATION_BIN}}
+INFO_PROVIDER_PATH=${INFO_PROVIDER_PATH:-${GLITE_CREAM_LOCATION_GIP}/provider}
+INFO_PLUGIN_PATH=${INFO_PLUGIN_PATH:-${GLITE_CREAM_LOCATION_GIP}/plugin}
+
+SERVICE=CREAM                          # In upper case
+SERVICE_HOST=${CE_HOST}   # YAIM variable
+
+SERVICE_LC=`echo ${SERVICE} | tr '[:upper:]' '[:lower:]'`
+
+if [ ! -f ${INFO_SERVICE_CONFIG}/glite-info-service-${SERVICE_LC}.conf.template ]; then
+  yaimlog ERROR "The template file for glite-info-service-${SERVICE_LC}.conf.template was not found in ${INFO_SERVICE_CONFIG}."
+  exit 1
+fi
+
+if [ ! -f ${INFO_SERVICE_SCRIPT}/glite-info-service ]; then
+  yaimlog ERROR "The script file for glite-info-service was not found in ${INFO_SERVICE_SCRIPT}."
+  exit 1
+fi
+
+yaimlog DEBUG "Delete a previous version of the glite-info-service-${SERVICE_LC}.conf if it exists"
+rm -rf ${INFO_SERVICE_CONFIG}/glite-info-service-${SERVICE_LC}.conf
+
+# Modify glite-info-service-${SERVICE_LC}.conf.template
+yaimlog DEBUG "Create the glite-info-service-${SERVICE_LC}.conf file out of the template file"
+TMP_FILE="${INFO_SERVICE_CONFIG}/glite-info-service-${SERVICE_LC}.conf.template"
+FINAL_FILE="${INFO_SERVICE_CONFIG}/glite-info-service-${SERVICE_LC}.conf"
+
+my_owner=""
+my_acbr=""
+i=0
+for vo in $VOS; do
+  if [ $i -eq 0 ]; then
+     my_owner=${my_owner}${vo}
+     my_acbr=${my_acbr}VO:${vo}
+  else
+     my_owner=${my_owner}\\\\n${vo}
+     my_acbr=${my_acbr}\\\\nVO:${vo}
+  fi
+  let i++
+done
+
+rpmcmd=`which rpm`
+  if  [ $? == 0 ]; then
+   yaimlog DEBUG "Using rpm to find glite-ce-cream version"
+   get_version_cmd="rpm -q --qf %{V} glite-ce-cream"
+  else
+   dpkgcmd=`which dpkg-query`
+   if  [ $? == 0 ]; then
+      yaimlog DEBUG "Using dpkg-query to find glite-ce-cream version"
+      get_version_cmd="dpkg-query -W -f='${Version}' glite-ce-cram"
+   else
+      yaimlog ERROR "This system doen't support rpm nor dpkg-query"
+      exit 1
+   fi
+  fi
+
+
+
+cat ${TMP_FILE} | sed \
+  -e "s|^init = .*|init = ${GLITE_CREAM_LOCATION_BIN}\/glite-info-service-cream|" \
+  -e "s|^get_endpoint = .*|get_endpoint = echo https:\/\/$CE_HOST:8443\/ce-cream\/services|" \
+  -e "s/^get_owner = .*/get_owner = echo -e \"${my_owner}\"/" \
+  -e "s/^get_acbr = .*/get_acbr = echo -e \"${my_acbr}\"/" \
+  -e "s/^get_data = .*/get_data = echo -n DN= \&\& openssl x509 -in \/etc\/grid-security\/hostcert.pem -noout -subject | cut -d "=" -f 2- /" \
+  -e "s/get_version =.*/get_version = ${get_version_cmd}/" \
+  -e "s/tomcat5/${TOMCAT_VERSION}/" \
+> ${FINAL_FILE}
+
+# Note: the configuration file may need to be altered if non standard values have been used.
+
+yaimlog DEBUG "Delete a previous version of the glite-info-provider-service-${SERVICE_LC}-wrapper if it exists"
+rm -rf ${INFO_PROVIDER_PATH}/glite-info-provider-service-${SERVICE_LC}-wrapper
+
+yaimlog DEBUG "Create the ${INFO_PROVIDER_PATH} in case it doesn't exist"
+mkdir -p ${INFO_PROVIDER_PATH}
+
+yaimlog DEBUG "Create the glite-info-provider-service-${SERVICE_LC}-wrapper file"
+cat << EOF > ${INFO_PROVIDER_PATH}/glite-info-provider-service-${SERVICE_LC}-wrapper
+#!/bin/sh
+export PATH=$PATH:${INFO_SERVICE_SCRIPT}
+export ${SERVICE}_HOST=${SERVICE_HOST}
+${INFO_SERVICE_SCRIPT}/glite-info-service ${INFO_SERVICE_CONFIG}/glite-info-service-${SERVICE_LC}.conf $SITE_NAME
+EOF
+
+#if [ -f ${INFO_SERVICE_SCRIPT}/glite-info-service-glue2 ]; then
+#cat << EOF >> ${INFO_PROVIDER_PATH}/glite-info-provider-service-${SERVICE_LC}-wrapper
+#${INFO_SERVICE_SCRIPT}/glite-info-service-glue2 ${INFO_SERVICE_CONFIG}/glite-info-service-${SERVICE_LC}.conf $SITE_NAME
+#EOF
+#fi
+
+chmod +x ${INFO_PROVIDER_PATH}/glite-info-provider-service-${SERVICE_LC}-wrapper
+
+return 0
+
+}
