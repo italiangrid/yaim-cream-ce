@@ -49,12 +49,12 @@ GLITE_CREAM_LOCATION_ETC=/etc
 GLITE_CREAM_LOCATION_LIBEXEC=/usr/libexec
 
 
-	### Auxiliary script parameters	
-	LDIF_FILE="static-file-CE.ldif"
-	INFOD_SCHED_WRAP="${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-scheduler-wrapper"
-        sched_conf="${GLITE_CREAM_LOCATION_ETC}/lrms/scheduler.conf"
+### Auxiliary script parameters	
+LDIF_FILE="static-file-CE.ldif"
+INFOD_SCHED_WRAP="${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-scheduler-wrapper"
+sched_conf="${GLITE_CREAM_LOCATION_ETC}/lrms/scheduler.conf"
 
-	### Beginning of ERT configuration
+### Beginning of ERT configuration
 ####@ Writes the wrapper for the information provider (${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-scheduler-wrapper)
 	cat << EOF > ${INFOD_SCHED_WRAP}
 #!/bin/sh -l
@@ -75,6 +75,19 @@ if [ ! "x${BLAH_JOBID_PREFIX_ES}" == "x" ]; then
 else
   es_prefix_def="# No prefix definition for ES"
 fi
+
+####@ Check the status of the directory used for ERT statistics
+if [ ! -d /var/tmp/info-dynamic-scheduler-generic ] ; then
+  mkdir -p /var/tmp/info-dynamic-scheduler-generic
+fi
+
+chown ldap.ldap /var/tmp/info-dynamic-scheduler-generic
+
+####@ Check the status of the directory used for scheduler.conf
+if [ ! -d ${GLITE_CREAM_LOCATION_ETC}/lrms ] ; then
+  mkdir -p ${GLITE_CREAM_LOCATION_ETC}/lrms
+fi
+
 
 ####@ Writes the [Main] section of the scheduler.conf file.
 
