@@ -44,6 +44,7 @@ rm -rf %{buildroot}
 /opt/glite/yaim/defaults/glite-creamce.pre
 /opt/glite/yaim/defaults/glite-creamce.post
 /opt/glite/yaim/etc/versions/@PKGNAME@
+/opt/glite/yaim/functions/config_canl_java_tomcat
 /opt/glite/yaim/functions/config_cream_*
 /opt/glite/yaim/functions/config_info_*
 /opt/glite/yaim/functions/utils/*
