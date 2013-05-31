@@ -32,6 +32,7 @@
 creamCE_FUNCTIONS="
 config_cream_detect_tomcat
 config_cream_stop
+config_canl_java_tomcat
 config_cream_db
 config_cream_emies_scratch_reinstall
 config_cream_emies_db
@@ -71,7 +72,6 @@ config_cream_info_service_rtepublish
 config_cream_gliteservices
 config_cream_locallogger
 config_glite_locallogger
-config_secure_tomcat
 config_cream_glite_initd
 "
 
