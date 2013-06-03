@@ -170,6 +170,18 @@ cat > /etc/${TOMCAT_VERSION}/server.xml << EOT
 EOT
 chown $TOMCAT_USER:$TOMCAT_USER /etc/${TOMCAT_VERSION}/server.xml
 
+####@ Remove symlinks to EMI2 jars
+
+DEPLIST="[bcprov] [commons-logging] [log4j] [trustmanager] [trustmanager-tomcat]"
+
+for DEPITEM in $DEPLIST; do
+    if [ -h ${TOMCAT_SERVER_LIB}/${DEPITEM} ] ; then
+        yaimlog DEBUG "Removing symbolic link ${TOMCAT_SERVER_LIB}/${DEPITEM}"
+        rm -f ${TOMCAT_SERVER_LIB}/${DEPITEM}
+    fi
+done
+
+
 ####@ Create symlinks to jars
 
 DEPLIST="/usr/share/java/bcprov.jar /usr/share/java/canl.jar /usr/share/java/canl-java-tomcat.jar /usr/share/java/commons-io.jar"
