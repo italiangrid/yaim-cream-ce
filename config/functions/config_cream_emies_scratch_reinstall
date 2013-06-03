@@ -52,50 +52,50 @@ fi
 
 yaimlog DEBUG "Reinstall EMI-ES if needed"
 
-if [ ! -L ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/glite-ce-cream-es.aar ] ; then
+ESLIBDIR=${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
 
-  cp -R /usr/share/axis2/webapp ${CATALINA_HOME}/webapps/ce-cream-es || exit 1
-
-  ln -s /usr/share/java/jclassads/cedar.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/jclassads/classad.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/argus-pep-api-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/argus-pep-common.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/trustmanager.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/bcprov.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/delegation-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
- ln -s /usr/share/java/glite-ce-common-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-ce-cream-api-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-ce-cream-blahExecutor.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-ce-cream-core.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-ce-cream-delegationExecutor.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-ce-cream-es-skeleton.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-ce-delegation-skeleton.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-  ln -s /usr/share/java/glite-jdl-api-java.jar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/lib
-
-  # customization of axis2.conf
-  REPLACE1='s|__CHANGE_SERVICE__|/etc/glite-ce-cream-es/cream-config.xml|g'
-  REPLACE2='s|__CHANGE_LOG4J__|/etc/glite-ce-cream-es/log4j.properties|g'
-  TMPPWD=`openssl rand -base64 15`
- REPLACE3='s|__CHANGE_PWD__|'$TMPPWD'|g'
-
-  sed "$REPLACE1 ; $REPLACE2 ; $REPLACE3" /etc/glite-ce-common-java/axis2.xml > ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/conf/axis2.xml
-
-  # cannot use symlinks for the following files:
-  cp -f /etc/glite-ce-common-java/web.xml ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/
-
-  ln -s /usr/share/glite-ce-cream/modules/glite-ce-cream-authorization.mar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules
-  rm ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/modules.list
-  for item in `ls ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/*.mar`; do
-    echo `basename $item` >> ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/modules.list ;
- done
-
-  ln -s /usr/share/glite-ce-cream/services/glite-ce-cream-es.aar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services
-  rm ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/services.list
-  for item in `ls ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/*.aar`; do
-    echo `basename $item` >> ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/services.list ;
-  done
-
+if [ -d ${CATALINA_HOME}/webapps/ce-cream-es ] ; then
+    return 0
 fi
+
+cp -R /usr/share/axis2/webapp ${CATALINA_HOME}/webapps/ce-cream-es
+
+[ -h ${ESLIBDIR}/cedar.jar ] || ln -s /usr/share/java/jclassads/cedar.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/classad.jar ] || ln -s /usr/share/java/jclassads/classad.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/bcprov.jar ] || ln -s /usr/share/java/bcprov.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/bcmail.jar ] || ln -s /usr/share/java/bcmail.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/argus-pep-api-java.jar ] || ln -s /usr/share/java/argus-pep-api-java.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/argus-pep-common.jar ] || ln -s /usr/share/java/argus-pep-common.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/canl.jar ] || ln -s /usr/share/java/canl.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/voms-api-java3.jar ] || ln -s /usr/share/java/voms-api-java3.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-jobid-api-java.jar ] || ln -s /usr/share/java/glite-jobid-api-java.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-lb-client-java.jar ] || ln -s /usr/share/java/glite-lb-client-java.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-common-java.jar ] || ln -s /usr/share/java/glite-ce-common-java.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-cream-api-java.jar ] || ln -s /usr/share/java/glite-ce-cream-api-java.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-cream-blahExecutor.jar ] || ln -s /usr/share/java/glite-ce-cream-blahExecutor.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-cream-core.jar ] || ln -s /usr/share/java/glite-ce-cream-core.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-cream-delegationExecutor.jar ] || ln -s /usr/share/java/glite-ce-cream-delegationExecutor.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-cream-es-skeleton.jar ] || ln -s /usr/share/java/glite-ce-cream-es-skeleton.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-ce-delegation-skeleton.jar ] || ln -s /usr/share/java/glite-ce-delegation-skeleton.jar ${ESLIBDIR}
+[ -h ${ESLIBDIR}/glite-jdl-api-java.jar ] || ln -s /usr/share/java/glite-jdl-api-java.jar ${ESLIBDIR}
+
+# set allowLinking option for tomcat6
+if [ ! -d ${CATALINA_HOME}/webapps/ce-cream-es/META-INF ] ; then
+  mkdir ${CATALINA_HOME}/webapps/ce-cream-es/META-INF
+  echo '<Context override="true" allowLinking="true"></Context>' > ${CATALINA_HOME}/webapps/ce-cream-es/META-INF/context.xml
+fi
+
+ln -sf /usr/share/glite-ce-cream/modules/glite-ce-cream-authorization.mar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules
+find ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules -name *.mar -exec basename \{\} \; > ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/modules/modules.list
+  
+ln -sf /usr/share/glite-ce-cream/services/glite-ce-cream-es.aar ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services
+find ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services -name *.aar -exec basename \{\} \; > ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/services/services.list
+
+# cannot use symlinks for the following files, copy is needed:
+cp -f /etc/glite-ce-cream-es/web.xml ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/
+cp -f /etc/glite-ce-cream-es/axis2.xml ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/conf
+chmod 600 ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/conf/axis2.xml
+chown tomcat.tomcat ${CATALINA_HOME}/webapps/ce-cream-es/WEB-INF/conf/axis2.xml
 
 return 0
 
