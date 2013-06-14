@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PKGNAME=glite-ce-yaim-cream-ce
-PKGVER=4.4.2
+PKGVER=4.4.3
 PKGREL=1
 
 ITEMS_FOR_SOURCE="config"
