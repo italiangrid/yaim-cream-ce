@@ -172,7 +172,7 @@ chown $TOMCAT_USER:$TOMCAT_USER /etc/${TOMCAT_VERSION}/server.xml
 
 ####@ Remove symlinks to EMI2 jars
 
-DEPLIST="[bcprov] [commons-logging] [log4j] [trustmanager] [trustmanager-tomcat]"
+DEPLIST="[bcprov].jar [commons-logging].jar [log4j].jar [trustmanager].jar [trustmanager-tomcat].jar"
 
 for DEPITEM in $DEPLIST; do
     if [ -h ${TOMCAT_SERVER_LIB}/${DEPITEM} ] ; then
