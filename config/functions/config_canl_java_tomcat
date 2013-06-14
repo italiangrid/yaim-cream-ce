@@ -184,7 +184,14 @@ done
 
 ####@ Create symlinks to jars
 
-DEPLIST="/usr/share/java/bcprov.jar /usr/share/java/canl.jar /usr/share/java/canl-java-tomcat.jar /usr/share/java/commons-io.jar"
+# workaround for BC on SL5
+if [ -e /usr/share/java/bcprov-1.46.jar ] ; then
+    BCLIB=/usr/share/java/bcprov-1.46.jar
+else
+    BCLIB=/usr/share/java/bcprov.jar
+fi
+
+DEPLIST="${BCLIB} /usr/share/java/canl.jar /usr/share/java/canl-java-tomcat.jar /usr/share/java/commons-io.jar"
 
 for DEPITEM in $DEPLIST; do
     yaimlog INFO "Linking ${DEPITEM} to tomcat server lib directory.."
