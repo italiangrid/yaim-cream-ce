@@ -178,9 +178,6 @@ EOF
 
 
 
-  yaimlog DEBUG "Restarting tomcat"
-  /sbin/service ${TOMCAT_VERSION} restart
-
   return 0
 
 }

@@ -145,9 +145,6 @@ if [ ${USE_CEMON} = true ]; then
   # cannot use symlinks for the following files:
   cp -f /etc/glite-ce-common-java/web.xml ${CATALINA_HOME}/webapps/ce-monitor/WEB-INF/
 
-
-  yaimlog DEBUG	"Restarting tomcat"
-  /sbin/service ${TOMCAT_VERSION} restart
   return 0
 
 else # do not deploy CEMon; remove it if already installed
@@ -159,8 +156,6 @@ else # do not deploy CEMon; remove it if already installed
     rm -f ${CATALINA_HOME}/conf/Catalina/localhost/ce-monitor.xml
   fi
 
-  yaimlog DEBUG	"Restarting tomcat"
-  /sbin/service ${TOMCAT_VERSION} start
   return 0
 fi
 }

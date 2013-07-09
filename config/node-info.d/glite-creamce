@@ -32,6 +32,7 @@
 creamCE_FUNCTIONS="
 config_cream_detect_tomcat
 config_cream_stop
+config_secure_tomcat
 config_cream_db
 config_cream_emies_scratch_reinstall
 config_cream_emies_db
@@ -47,7 +48,6 @@ config_edgusers
 config_cream_glexec_user
 config_cream_clean_sudoers
 config_cream_sudoers
-config_secure_tomcat
 config_vomsmap
 config_cream_remove_subcluster_ce
 config_lcas_lcmaps_gt4
@@ -56,6 +56,8 @@ config_cream_glexec
 config_cream_blah
 config_cream_ce
 config_cream_emies
+config_cream_cemon
+config_cream_start
 config_cream_logrotation
 config_bdii_5.2
 config_cream_gip_info_dynamic
@@ -65,7 +67,6 @@ config_cream_gip_scheduler_plugin
 config_cream_gip_software_plugin
 config_cream_vo_tag_dir
 config_info_service_cream_ce
-config_info_service_cemon
 config_cream_info_service_rtepublish
 config_cream_cemon
 config_cream_gliteservices

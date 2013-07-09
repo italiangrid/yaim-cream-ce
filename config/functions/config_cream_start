@@ -20,7 +20,7 @@
 #
 # NAME :        config_cream_stop
 #
-# DESCRIPTION : This function stops the CREAM CE service.
+# DESCRIPTION : This function runs the CREAM CE service.
 #
 # AUTHORS :     grid-release@infn.it
 #
@@ -28,65 +28,49 @@
 #
 ##############################################################################
 
-function config_cream_stop_check () {
+function config_cream_start_check () {
 
   requires $1  
 
 }
 
-function config_cream_stop_setenv () {
+function config_cream_start_setenv () {
 
   yaimlog DEBUG "No enviroment variables to set."
 
 }
 
-function config_cream_stop () {
+function config_cream_start () {
 
 
   GLITE_CREAM_LOCATION_ETC=/etc
 
-  ps ax | grep -v grep |grep blah > /dev/null 2>&1
-  blah_running=$?
-  /sbin/service ${TOMCAT_VERSION} status > /dev/null 2>&1
-  tomcat_running=$?
-  if [ $blah_running = 0 ] || [ $tomcat_running = 0 ]; then
-    yaimlog INFO "Stopping tomcat"
-    /sbin/service ${TOMCAT_VERSION} stop
-  else 
-    if [ ! $blah_running = 0 ]; then
-      yaimlog INFO "blah not running"
-    fi
-    if  [ ! $tomcat_running = 0 ]; then
-    yaimlog INFO "tomcat not running"
-    fi  
-  fi  
+  ps ax | grep -v grep |grep blparser > /dev/null 2>&1
+  if [ ! $? = 0 ]; then
+    yaimlog INFO "Starting blparser"
+    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser start
+  fi
 
   ps ax | grep -v grep |grep BUpdater > /dev/null 2>&1  
   bupdater_running=$?
   ps ax | grep -v grep |grep BNotifier > /dev/null 2>&1
   bnotifier_running=$?
-  if [ ${bupdater_running} = 0 ] || [ ${bnotifier_running} = 0 ]; then
-    yaimlog INFO "Stopping blah"
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser stop
+  if [ ! ${bupdater_running} = 0 ] && [ ! ${bnotifier_running} = 0 ]; then
+    yaimlog INFO "Starting blah"
+    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser start
   else 
     yaimlog INFO "blah not running"
   fi
 
-  ps ax | grep -v grep |grep blparser > /dev/null 2>&1
-  if [ $? = 0 ]; then
-    yaimlog INFO "Stopping blparser"
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser stop
-  fi
-
-  ps ax | grep -v grep |grep lb > /dev/null 2>&1
-  if [ $? = 0 ] ; then
-    yaimlog INFO "Stopping lb processes"
-    killall -9 glite-lb-interlogd
-    killall -9 glite-lb-locallogger
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-lb-locallogger stop
-  else
-    yaimlog INFO "lb processes not running"
-  fi
+  #workaround for bug #101108
+  sleep 5
+  
+  /sbin/service ${TOMCAT_VERSION} status > /dev/null 2>&1
+  tomcat_running=$?
+  if [ ! $tomcat_running = 0 ]; then
+    yaimlog INFO "Starting tomcat"
+    /sbin/service ${TOMCAT_VERSION} start
+  fi  
 
   return 0
 

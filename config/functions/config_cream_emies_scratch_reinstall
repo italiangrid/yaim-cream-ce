@@ -40,15 +40,12 @@ function config_cream_emies_scratch_reinstall () {
 
 if [ ${USE_EMIES} = false ]; then
   yaimlog DEBUG "Removing EMI-ES, if installed"
-  /sbin/service ${TOMCAT_VERSION} stop
   
   rm -Rf ${CATALINA_HOME}/webapps/ce-cream-es
   if [ -e ${CATALINA_HOME}/conf/Catalina/localhost/ce-cream-es.xml ] ; then
     rm -f ${CATALINA_HOME}/conf/Catalina/localhost/ce-cream-es.xml
   fi
     
-  yaimlog DEBUG "Restarting tomcat"
-  /sbin/service ${TOMCAT_VERSION} start
   return 0
 fi
 
