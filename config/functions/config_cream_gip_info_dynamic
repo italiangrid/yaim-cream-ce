@@ -114,6 +114,9 @@ case "$my_batch_sys" in
       sed -i "s|pbs-host\s*=.*|pbs-host=\"${BATCH_SERVER}\"|" $conffile;
       plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/info-dynamic-pbs $conffile";;
 
+   slurm)
+      plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/info-dynamic-slurm /etc/lrms/scheduler.conf";;
+
    *)
      yaimlog DEBUG "config_cream_gip_info_dynamic not able to manage this batch system"
 esac
