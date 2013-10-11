@@ -32,8 +32,8 @@
 
 config_cream_gip_info_dynamic_check () {
 
- requires $1 CE_BATCH_SYS BATCH_BIN_DIR \
-        CREAM_CE_STATE 
+ requires $1 CE_BATCH_SYS BATCH_BIN_DIR
+
  ret_cod1=$?
 
   BATCH_SYS=`echo $CE_BATCH_SYS | tr '[:upper:]' '[:lower:]'`
@@ -122,7 +122,6 @@ case "$my_batch_sys" in
 esac
                                                                                                                              
 yaimlog DEBUG "Configuring the dynamic plugin associated to the batch system ${CE_BATCH_SYS}"
-CREAM_CE_STATE2=`echo ${CREAM_CE_STATE} | tr '[:upper:]' '[:lower:]'`
 cat << EOF  > ${GLITE_CREAM_LOCATION_GIP}/plugin/glite-info-dynamic-ce
 #!/bin/sh
 /usr/libexec/glite-ce-check-submission-state /etc/glite-ce-dbtool/creamdb_min_access.conf
@@ -131,8 +130,8 @@ if [ \$retcode = 1 ] || [ \$retcode = 2 ] ; then
   # Submissions disabled. Publish Draining
   $plugin | sed -e 's/GlueCEStateStatus: Production/GlueCEStateStatus: Draining/;s/GLUE2ComputingShareServingState: production/GLUE2ComputingShareServingState: draining/'
 else 
-  # Submissions enabled. Use CREAM_CE_STATE (Production by default)
-  $plugin | sed -e 's/GlueCEStateStatus: Production/GlueCEStateStatus: ${CREAM_CE_STATE}/;s/GLUE2ComputingShareServingState: production/GLUE2ComputingShareServingState: ${CREAM_CE_STATE2}/'
+  # Submissions enabled.
+  $plugin
 fi
 EOF
 

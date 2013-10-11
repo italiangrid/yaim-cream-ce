@@ -30,7 +30,7 @@
 
 function config_cream_gip_glue2_check () {
 
-  requires $1 SITE_NAME CE_HOST CREAM_CE_STATE CE_BATCH_SYS BATCH_VERSION \
+  requires $1 SITE_NAME CE_HOST CE_BATCH_SYS BATCH_VERSION \
               CE_OTHERDESCR VOS QUEUES __GROUP_ENABLE USE_CEMON CE_CAPABILITY
   ret_cod1=$?
   if [ "x${CREAM_CLUSTER_MODE}" == "xyes" ]; then
@@ -363,7 +363,7 @@ HealthStateHelper = ${GLITE_CREAM_LOCATION_BIN}/glite-info-service-test CREAM
 #
 #
 # ServingState of the Computing Element. It should be usually set to production
-ServingState = ${CREAM_CE_STATE}
+ServingState = production
 #
 #
 # Owner should be the list of owner VO names

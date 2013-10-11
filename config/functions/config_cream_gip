@@ -62,7 +62,7 @@ function config_cream_gip_check_nocluster () {
     CE_CPU_MODEL CE_CPU_VENDOR CE_CPU_SPEED CE_OS CE_OS_RELEASE \
     CE_MINPHYSMEM CE_MINVIRTMEM CE_SMPSIZE CE_SI00 CE_SF00 \
     CE_OUTBOUNDIP CE_INBOUNDIP CE_RUNTIMEENV \
-    CE_PHYSCPU CE_LOGCPU CREAM_CE_STATE GROUPS_CONF \
+    CE_PHYSCPU CE_LOGCPU GROUPS_CONF \
     CE_OS_ARCH CE_OS_VERSION CE_HOST \
     CE_CAPABILITY CE_OTHERDESCR VO_SW_DIR \
     SE_MOUNT_INFO_LIST __GROUP_ENABLE 
@@ -277,7 +277,7 @@ GlueCEInfoDefaultSE: $default_se
 GlueCEStateEstimatedResponseTime: 2146660842
 GlueCEStateFreeCPUs: 0
 GlueCEStateRunningJobs: 0
-GlueCEStateStatus: ${CREAM_CE_STATE}
+GlueCEStateStatus: Production
 GlueCEStateTotalJobs: 0
 GlueCEStateWaitingJobs: 444444
 GlueCEStateWorstResponseTime: 2146660842
