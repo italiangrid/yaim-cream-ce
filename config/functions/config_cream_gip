@@ -435,20 +435,25 @@ GlueSchemaVersionMinor: 3
 EOF
   done
 
-  for se in ${SE_LIST}; 
-  do
+  for se in ${SE_LIST}; do
+  
     accesspoint="n.a"
-    for item in ${SE_MOUNT_INFO_LIST}
-    do
-      se_aux=${item%:*}
-      if [ "x${se}" == "x${se_aux}" ]; then
-        accesspoint=${item#*:}
-        export=${accesspoint%,*} 
-        mount=${accesspoint#*,}
-        accesspoint="${mount},${export}"
-        break
-      fi
+    for item in ${SE_MOUNT_INFO_LIST} ; do
+
+        se_info_norm=`echo ${item} | sed -e 's/\\\:/%3A/g' -e 's/\\\,/%2C/g'`
+
+        tmp_host=`echo ${se_info_norm} | awk -F ':' '{print $1}'`
+        tmp_tail=`echo ${se_info_norm} | awk -F ':' '{print $2}'`
+        tmp_export_dir=`echo ${tmp_tail} | awk -F ',' '{print $1}' | sed -e 's/%3A/:/g' -e 's/%2C/,/g'`
+        tmp_mount_dir=`echo ${tmp_tail} | awk -F ',' '{print $2}' | sed -e 's/%3A/:/g' -e 's/%2C/,/g'`
+
+        if [ "x${se}" == "x${tmp_host}" ]; then
+            accesspoint="${tmp_mount_dir},${tmp_export_dir}"
+            break
+        fi
+
     done
+
     for QUEUE in $QUEUES; 
     do
       cat << EOF >> $outfile

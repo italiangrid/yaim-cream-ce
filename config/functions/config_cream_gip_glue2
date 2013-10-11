@@ -294,7 +294,7 @@ fi
 close_se_list=""
 if [ ! "X" = "X${SE_LIST}" ]; then
 
-  if [ $SE_MOUNT_INFO_LIST = "none" ]; then
+  if [ "x$SE_MOUNT_INFO_LIST" = "xnone" ]; then
 
     for se in ${SE_LIST}; do 
       close_se_list="${close_se_list} (${se} none none),"
@@ -302,12 +302,18 @@ if [ ! "X" = "X${SE_LIST}" ]; then
 
   else if [ ! "x" = "x${SE_MOUNT_INFO_LIST}" ]; then
 
-    for se_info in ${SE_MOUNT_INFO_LIST}; do 
-      se_i=`echo ${se_info} | sed -e 's/:.*//g'`
-      export_dir_i=`echo ${se_info} | sed -e 's/.*://g' |sed -e 's/,.*//g'`
-      mount_dir_i=`echo ${se_info} | sed -e 's/.*,//g'`
-      close_se_list="${close_se_list} (${se_i} ${export_dir_i} ${mount_dir_i}),"
-    done    
+    for se_info in ${SE_MOUNT_INFO_LIST}; do
+
+      se_info_norm=`echo ${se_info} | sed -e 's/\\\:/%3A/g' -e 's/\\\,/%2C/g'`
+
+      tmp_host=`echo ${se_info_norm} | awk -F ':' '{print $1}'`
+      tmp_tail=`echo ${se_info_norm} | awk -F ':' '{print $2}'`
+      tmp_export_dir=`echo ${tmp_tail} | awk -F ',' '{print $1}' | sed -e 's/%3A/:/g' -e 's/%2C/,/g'`
+      tmp_mount_dir=`echo ${tmp_tail} | awk -F ',' '{print $2}' | sed -e 's/%3A/:/g' -e 's/%2C/,/g'`
+
+      close_se_list="${close_se_list} (${tmp_host} ${tmp_mount_dir} ${tmp_export_dir}),"
+
+    done
   fi
   fi
 
