@@ -135,7 +135,7 @@ chmod 400 ${TOMCAT_HOSTKEY_LOCATION}
 CRL_UPDATE_MILLIS="3600000"
 
 TVAR=`echo ${TRUSTMANAGER_CRL_UPDATE_INTERVAL} | grep -Eo '[0-9]+[hms]'`
-if [ -z "${TVAR}" ] ; then
+if [ -n "${TVAR}" ] ; then
     TMPEXPR=`echo ${TRUSTMANAGER_CRL_UPDATE_INTERVAL} | sed -e 's|h|*3600000|g' -e 's|m|*60000|g' -e 's|s|*1000|g'`
     CRL_UPDATE_MILLIS=$[ ${TMPEXPR} ]
     yaimlog DEBUG "Update time interval: ${CRL_UPDATE_MILLIS}"
