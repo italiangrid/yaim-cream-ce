@@ -53,7 +53,13 @@ rm -rf %{buildroot}
 /opt/glite/yaim/examples/siteinfo/services/glite-creamce
 
 %changelog
-* Fri Aug 31 2012 CREAM group <cream-support@lists.infn.it> - @PKGVERSION@-@PKGRELEASE@
-- New major release
+* Fri May 05 2014 CREAM group <cream-support@lists.infn.it> - @PKGVERSION@-@PKGRELEASE@
+- Fixed bug: https://issues.infn.it/jira/browse/CREAM-133
+
+* Mon Oct 14 2013 CREAM group <cream-support@lists.infn.it> - 4.4.4-2
+- Fixed bug: https://issues.infn.it/jira/browse/CREAM-127
+
+* Mon Jun 24 2013 CREAM group <cream-support@lists.infn.it> - 4.4.3-2
+- Internal restructuring
 
 
