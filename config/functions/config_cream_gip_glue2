@@ -372,6 +372,10 @@ HealthStateHelper = ${GLITE_CREAM_LOCATION_BIN}/glite-info-service-test CREAM
 ServingState = production
 #
 #
+# QualityLevel of the Service Element. It should be usually set to production
+QualityLevel = ${CREAM_CE_STATE:-production}
+#
+#
 # Owner should be the list of owner VO names
 Owner = ${my_owner}
 #
