@@ -46,21 +46,30 @@ function config_cream_db () {
   HOSTNAME=`hostname -f`
 
   if [ "x${CREAM_DB_HOST}" = "x${HOSTNAME}" -o "x${CREAM_DB_HOST}" = "xlocalhost" ]; then
-    chmod og+rx /var/lib/mysql/ 
-    chown mysql:mysql /var/run/mysqld/
+    if [ "x${MYSQL_SERVICE_NAME:-mysqld}" == "mysqld" ] ; then
+      chmod og+rx /var/lib/mysql/ 
+      chown mysql:mysql /var/run/mysqld/
 
-    /sbin/chkconfig mysqld on
-    ps ax | grep -v grep |grep mysqld_safe > /dev/null 2>&1
-    if [ ! $? = 0 ] ; then
-      /etc/init.d/mysqld start
-      sleep 1
-    fi 
+      /sbin/chkconfig mysqld on
+      ps ax | grep -v grep |grep mysqld_safe > /dev/null 2>&1
+      if [ ! $? = 0 ] ; then
+        /etc/init.d/mysqld start
+        sleep 1
+      fi 
 
-    ls /tmp/mysql.sock > /dev/null 2>&1
-    if [ ! $? = 0 ]; then
-      ln -s /var/lib/mysql/mysql.sock /tmp/mysql.sock
+      ls /tmp/mysql.sock > /dev/null 2>&1
+      if [ ! $? = 0 ]; then
+        ln -s /var/lib/mysql/mysql.sock /tmp/mysql.sock
+      fi
+    else
+      /sbin/chkconfig ${MYSQL_SERVICE_NAME} on
+      ps ax | grep -v grep |grep mysqld_safe > /dev/null 2>&1
+      if [ ! $? = 0 ] ; then
+        /sbin/service ${MYSQL_SERVICE_NAME} start
+        sleep 1
+      fi
     fi
-
+    
     # set mysql password
     set_mysql_passwd || return 1 # the function uses $MYSQL_PASSWORD
 
@@ -162,7 +171,7 @@ function config_cream_db () {
 
 function configure_mysql () {
 
-  mysql_conf_script="/etc/my.cnf"
+  mysql_conf_script=${MYSQL_PATH_PREFIX:-""}"/etc/my.cnf"
   max_connection_num=`grep -Eo '^\s*max_connections\s*=\s*[0-9]+' ${mysql_conf_script} | grep -Eo '[0-9]+'`
   if [ "x" == "x${max_connection_num}" ]; then     #max_connection_num not configured
     input_file=${mysql_conf_script}
