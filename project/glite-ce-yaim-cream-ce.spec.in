@@ -54,6 +54,9 @@ rm -rf %{buildroot}
 
 %changelog
 * Fri May 05 2014 CREAM group <cream-support@lists.infn.it> - @PKGVERSION@-@PKGRELEASE@
+- Fixed bug: https://issues.infn.it/jira/browse/CREAM-106
+
+* Fri May 05 2014 CREAM group <cream-support@lists.infn.it> - 4.4.5-1
 - Fixed bug: https://issues.infn.it/jira/browse/CREAM-133
 
 * Mon Oct 14 2013 CREAM group <cream-support@lists.infn.it> - 4.4.4-2
