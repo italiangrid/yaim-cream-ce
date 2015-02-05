@@ -144,7 +144,7 @@ declare -a votable
 for QUEUE in $QUEUES; do
 
     # Converting the dots and dashes to underscore to get the proper variable name
-    dnssafevar=`echo $QUEUE | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+    dnssafevar=`echo $QUEUE | tr '[:lower:].\-@/' '[:upper:]_'`
     requires $1 ${dnssafevar}_GROUP_ENABLE
     qenablevar=${dnssafevar}_GROUP_ENABLE
 

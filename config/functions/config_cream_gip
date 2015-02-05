@@ -73,7 +73,7 @@ function config_cream_gip_check_nocluster () {
   if [ "x$BATCH_SYS" == "xlsf" ]; then
     requires $1 BATCH_BIN_DIR LSFPROFILE_DIR
     ret_cod2=$?
-  elif [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] || [ $BATCH_SYS = slurm ]; then
+  elif [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] || [ $BATCH_SYS = slurm ] || [ $BATCH_SYS = condor ]; then
     requires $1 BATCH_SERVER
     ret_cod2=$?
   fi
@@ -303,8 +303,8 @@ EOF
     echo "GlueCECapability: ${capa}" >> $outfile
   done
 
-# Converting the dots and dashes to underscore to get the proper variable name
-    dnssafevar=`echo $QUEUE | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+# Converting forbidden chars to underscore to get the proper variable name
+    dnssafevar=`echo $QUEUE | tr '[:lower:].\-@/' '[:upper:]_'`
     qenablevar=${dnssafevar}_GROUP_ENABLE
 
     if [ "${!qenablevar}" ] ; then
@@ -372,7 +372,7 @@ EOF
           allvoview="";thisqueuevoview=""
           # Collecting all VoView defs
           for OQUEUE in ${QUEUES}; do
-            dsv=`echo $OQUEUE | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+            dsv=`echo $OQUEUE | tr '[:lower:].\-@/' '[:upper:]_'`
             oqenvar=${dsv}_GROUP_ENABLE
             allvoview="${allvoview} ${!oqenvar}"
           done
@@ -483,7 +483,7 @@ EOF
 config_cream_gip_check_cluster () {
   requires $1 SE_LIST CE_BATCH_SYS VOS CE_HOST
   ret=$?
-  CE_name=`echo ${CE_HOST} | sed -e 's/-/_/g' -e 's/\./_/g' | tr '[:upper:]' '[:lower:]'`
+  CE_name=`echo ${CE_HOST} | tr '[:upper:].\-' '[:lower:]_'`
   requires $1 CE_HOST_${CE_name}_QUEUES CE_HOST_${CE_name}_CE_InfoJobManager \
               CE_HOST_${CE_name}_QUEUE__CE_AccessControlBaseRule \
               CE_HOST_${CE_name}_CE_TYPE
@@ -522,11 +522,11 @@ config_cream_gip_cluster () {
   OUTFILE=${LDIF_DIR}/static-file-CE.ldif
   cat /dev/null > ${OUTFILE}
 
-  CE_name=`echo ${CE_HOST} | sed -e 's/[\.-]/_/g' | tr '[:upper:]' '[:lower:]'`     # Transform . and - into _ for the variable name.
+  CE_name=`echo ${CE_HOST} | tr '[:upper:].\-' '[:lower:]_'`     # Transform . and - into _ for the variable name.
   ce_type=`eval echo "\\$CE_HOST_${CE_name}_CE_TYPE"`
 
   for QUEUE in `eval echo "\\$CE_HOST_${CE_name}_QUEUES"`; do
-      QUEUE_name=`echo ${QUEUE} | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+      QUEUE_name=`echo ${QUEUE} | tr '[:lower:].\-@/' '[:upper:]_'`
       requires $1 QUEUE_${QUEUE_name}_CLUSTER_UniqueID
 
   yaimlog DEBUG "Configuring the queue information for queue ${QUEUE} for CE ${CE_name}"
@@ -607,7 +607,7 @@ EOF
         if [ "x${FQANVOVIEWS}" = "xyes" ] || ([ ! `echo $j | grep "/"` ] && [ "x${FQANVOVIEWS}" = "xno" ] ) ; then
           convert_fqan "${j}"
           voview=`echo ${j} | sed -e 's/=/_/g'`
-          voview_name=`echo ${voview} | sed -e 's/\//_/g' | sed -e 's/[\.-]/_/g' | tr '[:lower:]' '[:upper:]'`
+          voview_name=`echo ${voview} | tr '[:lower:].\-/' '[:upper:]_'`
           echo "dn: GlueVOViewLocalID=${voview},GlueCEUniqueID=${CE_HOST}:8443/${ce_type}-`eval echo "\\$CE_HOST_${CE_name}_CE_InfoJobManager"`-${QUEUE},mds-vo-name=resource,o=grid" >> $OUTFILE
           cat <<EOF >> $OUTFILE
 objectClass: GlueCETop
@@ -675,7 +675,7 @@ EOF
 ##################
 
           for deny_QUEUE in `eval echo "\\$CE_HOST_${CE_name}_QUEUES"`; do
-            deny_QUEUE_name=`echo ${deny_QUEUE} | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+            deny_QUEUE_name=`echo ${deny_QUEUE} | tr '[:lower:].\-@/' '[:upper:]_'`
             deny_var=CE_HOST_${CE_name}_QUEUE_${deny_QUEUE_name}_AccessControlBaseRule
             allowview="${allowview} ${!deny_var}"
           done
@@ -710,7 +710,7 @@ yaimlog DEBUG "Configuring the GlueCESEBind"
 OUTFILE=${LDIF_DIR}/static-file-CESEBind.ldif
 cat  /dev/null > ${OUTFILE}
 for QUEUE in `eval echo "\\$CE_HOST_${CE_name}_QUEUES"`; do
-  QUEUE_name=`echo ${QUEUE} | sed -e 's/[\.-]/_/g' |  tr '[:lower:]' '[:upper:]'`
+  QUEUE_name=`echo ${QUEUE} | tr '[:lower:].\-@/' '[:upper:]_'`
   echo "" >> ${OUTFILE}
   echo "dn: GlueCESEBindGroupCEUniqueID=${CE_HOST}:8443/${ce_type}-`eval echo "\\$CE_HOST_${CE_name}_CE_InfoJobManager"`-${QUEUE},mds-vo-name=resource,o=grid" >> ${OUTFILE}
 cat <<EOF   >> ${OUTFILE}
