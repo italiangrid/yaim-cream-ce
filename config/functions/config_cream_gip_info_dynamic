@@ -40,7 +40,7 @@ config_cream_gip_info_dynamic_check () {
   if [ "x$BATCH_SYS" == "xlsf" ]; then
     requires $1 BATCH_BIN_DIR LSFPROFILE_DIR
     ret_cod2=$?
-  elif [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] || [ $BATCH_SYS = slurm ]; then
+  elif [ $BATCH_SYS = pbs ] || [ $BATCH_SYS = torque ] || [ $BATCH_SYS = slurm ] || [ $BATCH_SYS = condor ]; then
     requires $1 BATCH_SERVER
     ret_cod2=$?
   fi
@@ -92,6 +92,24 @@ case "$my_batch_sys" in
 
     condor)
       plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/glite-info-dynamic-condor ${BATCH_BIN_DIR:-/usr/bin}/ ${LDIF_DIR}/static-file-CE.ldif";;
+      yaimlog DEBUG "Writing the /etc/lrms/condor.conf file ..."
+      cat > /etc/lrms/condor.conf <<EOF
+# Condor info provider configuration file
+# /etc/lrms/condor.conf
+
+# format of the output file
+outputformat="both"
+
+# Location of static ldif files
+glue1_ldif_file="${glue1celdif}"
+glue2_static_file_computing_manager="${glue2managerldif}"
+glue2_static_file_computing_share="${glue2shareldif}"
+
+# condor executables path
+condor_path="${BATCH_BIN_DIR}"
+EOF
+
+      plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/glite-info-dynamic-condor";;
 
     lsf)
       yaimlog DEBUG "Customizing the /etc/lrms/lsf.conf file ..."
