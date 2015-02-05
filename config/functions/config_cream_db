@@ -46,7 +46,7 @@ function config_cream_db () {
   HOSTNAME=`hostname -f`
 
   if [ "x${CREAM_DB_HOST}" = "x${HOSTNAME}" -o "x${CREAM_DB_HOST}" = "xlocalhost" ]; then
-    if [ "x${MYSQL_SERVICE_NAME:-mysqld}" == "mysqld" ] ; then
+    if [ "x${MYSQL_SERVICE_NAME:-mysqld}" == "xmysqld" ] ; then
       chmod og+rx /var/lib/mysql/ 
       chown mysql:mysql /var/run/mysqld/
 

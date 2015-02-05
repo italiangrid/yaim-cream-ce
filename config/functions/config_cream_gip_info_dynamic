@@ -91,7 +91,7 @@ fi
 case "$my_batch_sys" in
 
     condor)
-      plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/glite-info-dynamic-condor ${BATCH_BIN_DIR:-/usr/bin}/ ${LDIF_DIR}/static-file-CE.ldif";;
+      plugin="${GLITE_CREAM_LOCATION_LIBEXEC}/glite-info-dynamic-condor ${BATCH_BIN_DIR:-/usr/bin}/ ${LDIF_DIR}/static-file-CE.ldif"
       yaimlog DEBUG "Writing the /etc/lrms/condor.conf file ..."
       cat > /etc/lrms/condor.conf <<EOF
 # Condor info provider configuration file
