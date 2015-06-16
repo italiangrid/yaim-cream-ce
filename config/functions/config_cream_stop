@@ -67,7 +67,7 @@ function config_cream_stop () {
   bnotifier_running=$?
   if [ ${bupdater_running} = 0 ] || [ ${bnotifier_running} = 0 ]; then
     yaimlog INFO "Stopping blah"
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser stop
+    /sbin/service glite-ce-blah-parser stop
   else 
     yaimlog INFO "blah not running"
   fi
@@ -75,7 +75,7 @@ function config_cream_stop () {
   ps ax | grep -v grep |grep blparser > /dev/null 2>&1
   if [ $? = 0 ]; then
     yaimlog INFO "Stopping blparser"
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser stop
+    /sbin/service glite-ce-blah-parser stop
   fi
 
   ps ax | grep -v grep |grep lb > /dev/null 2>&1
@@ -83,7 +83,7 @@ function config_cream_stop () {
     yaimlog INFO "Stopping lb processes"
     killall -9 glite-lb-interlogd
     killall -9 glite-lb-locallogger
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-lb-locallogger stop
+    /sbin/service glite-lb-locallogger stop
   else
     yaimlog INFO "lb processes not running"
   fi

@@ -48,7 +48,7 @@ function config_cream_start () {
   ps ax | grep -v grep |grep blparser > /dev/null 2>&1
   if [ ! $? = 0 ]; then
     yaimlog INFO "Starting blparser"
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser start
+    /sbin/service glite-ce-blah-parser start
   fi
 
   ps ax | grep -v grep |grep BUpdater > /dev/null 2>&1  
@@ -57,7 +57,7 @@ function config_cream_start () {
   bnotifier_running=$?
   if [ ! ${bupdater_running} = 0 ] && [ ! ${bnotifier_running} = 0 ]; then
     yaimlog INFO "Starting blah"
-    ${GLITE_CREAM_LOCATION_ETC}/init.d/glite-ce-blah-parser start
+    /sbin/service glite-ce-blah-parser start
   else 
     yaimlog INFO "blah not running"
   fi
