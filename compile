@@ -13,6 +13,27 @@ fi
 
 if [ -z "${1}" -o "${1}" == "rpm" ] ; then
 
+    TMPS=`grep -Eo 'Scientific Linux release 6.[0-9]+' /etc/redhat-release`
+    if [ ! "x${TMPS}" == "x" ]; then
+        DISTRORELEASE="sl6"
+    fi
+
+    TMPS=`grep -Eo 'Scientific Linux release 5.[0-9]+' /etc/redhat-release`
+    if [ ! "x${TMPS}" == "x" ]; then
+        DISTRORELEASE="sl5"
+    fi
+
+    TMPS=`grep -Eo 'CentOS Linux release 7.[0-9]+' /etc/redhat-release`
+    if [ ! "x${TMPS}" == "x" ]; then
+        DISTRORELEASE="centos7"
+    fi
+
+    if [ "x${DISTRORELEASE}" == "x" ]; then
+        echo "Cannot detect distro version"
+        exit 1
+    fi
+
+
     mkdir -p  rpmbuild/RPMS
     mkdir -p  rpmbuild/SRPMS/
     mkdir -p  rpmbuild/SPECS/
@@ -23,6 +44,7 @@ if [ -z "${1}" -o "${1}" == "rpm" ] ; then
     sed -e 's|@PKGNAME@|'${PKGNAME}'|g' \
         -e 's|@PKGVERSION@|'${PKGVER}'|g' \
         -e 's|@PKGRELEASE@|'${PKGREL}'|g' \
+        -e 's|@DISTRORELEASE@|'${DISTRORELEASE}'|g' \
         project/${PKGNAME}.spec.in > rpmbuild/SPECS/${PKGNAME}.spec
     rpmbuild -ba --define "_topdir ${PWD}/rpmbuild" rpmbuild/SPECS/${PKGNAME}.spec
 

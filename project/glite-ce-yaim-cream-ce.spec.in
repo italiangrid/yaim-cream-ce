@@ -32,7 +32,9 @@ cp %{_builddir}/%{name}-%{version}/config/functions/config* %{buildroot}/opt/gli
 cp %{_builddir}/%{name}-%{version}/config/functions/utils/*_* %{buildroot}/opt/glite/yaim/functions/utils
 cp %{_builddir}/%{name}-%{version}/config/node-info.d/glite* %{buildroot}/opt/glite/yaim/node-info.d
 cp %{_builddir}/%{name}-%{version}/config/services/glite* %{buildroot}/opt/glite/yaim/examples/siteinfo/services
-
+%if "@DISTRORELEASE@" == "centos7"
+sed  -i -e '/config_cream_glite_initd/d' -e '/config_cream_gliteservices/d' %{buildroot}/opt/glite/yaim/node-info.d/glite-creamce
+%endif
 
 %clean
 rm -rf %{buildroot}
