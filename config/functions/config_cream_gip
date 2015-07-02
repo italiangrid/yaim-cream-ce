@@ -546,7 +546,6 @@ GlueSchemaVersionMajor: 1
 GlueSchemaVersionMinor: 3
 EOF
   echo "GlueCEUniqueID: ${CE_HOST}:8443/${ce_type}-`eval echo "\\$CE_HOST_${CE_name}_CE_InfoJobManager"`-${QUEUE}"  >> $OUTFILE
-  echo "GlueCEHostingCluster: ${CE_HOST}"  >> $OUTFILE
   echo "GlueCEName: ${QUEUE}" >> $OUTFILE
   echo "GlueCEInfoHostName: ${CE_HOST}" >> $OUTFILE
   echo "GlueCEInfoContactString: https://${CE_HOST}:8443/ce-cream/services" >> $OUTFILE
@@ -577,6 +576,7 @@ EOF
           echo "GlueCE$i: ${default_se}" >> ${OUTFILE}
 	  fi
       done # Glue CE
+      echo "GlueCEHostingCluster: `eval echo "\\$QUEUE_${QUEUE_name}_CLUSTER_UniqueID"`"  >> $OUTFILE
       echo "GlueForeignKey: GlueClusterUniqueID=`eval echo "\\$QUEUE_${QUEUE_name}_CLUSTER_UniqueID"`" >> $OUTFILE
       echo "GlueInformationServiceURL: ldap://`hostname -f`:${info_port}/mds-vo-name=${info_type},o=grid" >> $OUTFILE
 
